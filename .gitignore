@@ -1,0 +1,36 @@
+## Build
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+*.cache
+
+## Visual Studio
+.vs/
+*.rsuser
+*.userosscache
+*.sln.docstates
+
+## Rider
+.idea/
+
+## Secretos y configuracion local
+## La cadena de conexion y las API Keys NO se suben al repositorio.
+appsettings.Development.json
+appsettings.Production.json
+appsettings.*.Local.json
+*.pfx
+*.p12
+secrets.json
+.env
+.env.local
+
+## Logs
+*.log
+logs/
+
+## Sistema
+.DS_Store
+Thumbs.db
