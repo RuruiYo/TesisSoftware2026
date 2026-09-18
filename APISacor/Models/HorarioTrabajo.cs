@@ -21,7 +21,7 @@ public class HorarioTrabajo : EntidadBase
     public TimeSpan Entrada { get; set; }
 
     [Column("salida", TypeName = "time(0)")]
-    public TimeSpan Salida { get; set; }
+    public TimeSpan? Salida { get; set; }
 
     [JsonIgnore]
     [ForeignKey(nameof(IdEmpleadoMarco))]
