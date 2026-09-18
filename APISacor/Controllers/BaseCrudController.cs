@@ -13,6 +13,12 @@ namespace APISacor.Controllers;
 // paginacion y manejo de errores vive en UN solo lugar. Si estuviera copiada en los
 // 20 controladores, tarde o temprano uno se quedaria sin una de las protecciones:
 // centralizarla es lo que garantiza que las 20 tablas esten cubiertas igual.
+//
+// Los 19 controladores de clave simple heredan de aqui, asi que ya traen paginacion
+// con tope, sanitizacion de texto, forzado de la clave primaria y manejo de 404 y 409
+// sin repetir una sola linea. Cada uno vive en su propio archivo y solo agrega sus
+// reglas propias sobrescribiendo ValidarReglasPropias.
+// La tabla puente viaje_extra_empleado no hereda de aqui porque tiene clave compuesta.
 [ApiController]
 [Produces("application/json")]
 public abstract class BaseCrudController<TEntidad> : ControllerBase
