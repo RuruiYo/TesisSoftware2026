@@ -27,6 +27,15 @@ public class ApiKeyMiddleware
     {
         var ruta = contexto.Request.Path.Value ?? string.Empty;
 
+        // La APK no puede ocultar una llave compartida. Las rutas moviles
+        // validan el codigo de un solo uso o el token individual en su controlador.
+        // StartsWithSegments no acepta rutas parecidas como /api/movil-falso.
+        if (contexto.Request.Path.StartsWithSegments("/api/movil"))
+        {
+            await _siguiente(contexto);
+            return;
+        }
+
         // Swagger y health quedan fuera del filtro.
         if (_opciones.RutasPublicas.Any(r => ruta.StartsWith(r, StringComparison.OrdinalIgnoreCase)))
         {

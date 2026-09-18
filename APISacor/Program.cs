@@ -68,6 +68,8 @@ builder.Services.AddDbContext<SacorDbContext>(opciones =>
     opciones.EnableDetailedErrors(builder.Environment.IsDevelopment());
 });
 
+builder.Services.AddScoped<ServicioAccesoMovil>();
+
 // ---------------------------------------------------------------------------
 // SEGURIDAD: lectura de las API Keys desde configuracion, nunca del codigo.
 // ---------------------------------------------------------------------------
@@ -110,6 +112,18 @@ builder.Services.AddHttpClient<ClienteServicioExterno>(cliente =>
 builder.Services.AddRateLimiter(opciones =>
 {
     opciones.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Limite especifico por IP para intentos de activacion, adicional al global.
+    opciones.AddPolicy("ActivacionMovil", contexto =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            contexto.Connection.RemoteIpAddress?.ToString() ?? "anonimo",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+            }));
 
     opciones.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(contexto =>
     {
@@ -155,7 +169,7 @@ builder.Services.AddCors(opciones =>
         if (origenesPermitidos.Length > 0)
         {
             politica.WithOrigins(origenesPermitidos)
-                    .WithHeaders("Content-Type", "X-Api-Key")
+                    .WithHeaders("Content-Type", "X-Api-Key", "Authorization")
                     .WithMethods("GET", "POST", "PUT", "DELETE");
         }
     });
@@ -219,6 +233,15 @@ builder.Services.AddSwaggerGen(opciones =>
         Type = SecuritySchemeType.ApiKey,
         In = ParameterLocation.Header,
         Description = "Llave asignada a la app consumidora."
+    });
+
+    // Las rutas /api/movil usan Bearer personal, no X-Api-Key incluida en una APK.
+    opciones.AddSecurityDefinition("BearerMovil", new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "opaque",
+        Description = "Token personal entregado por POST /api/movil/activacion."
     });
 
     opciones.AddSecurityRequirement(new OpenApiSecurityRequirement

@@ -27,6 +27,8 @@ public class SacorDbContext : DbContext
     public DbSet<SolicitudPuestoTrabajo> SolicitudesPuestoTrabajo => Set<SolicitudPuestoTrabajo>();
     public DbSet<ObservacionEmpleado> ObservacionesEmpleado => Set<ObservacionEmpleado>();
     public DbSet<ViajeExtraEmpleado> ViajeExtraEmpleados => Set<ViajeExtraEmpleado>();
+    public DbSet<CodigoActivacionMovil> CodigosActivacionMovil => Set<CodigoActivacionMovil>();
+    public DbSet<SesionMovil> SesionesMoviles => Set<SesionMovil>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -35,6 +37,21 @@ public class SacorDbContext : DbContext
         // Clave primaria compuesta de la tabla puente.
         modelBuilder.Entity<ViajeExtraEmpleado>()
             .HasKey(v => new { v.IdViajeExtra, v.IdEmpleado });
+
+        // Se agregan sin alterar las entidades/columnas ya existentes.
+        modelBuilder.Entity<CodigoActivacionMovil>()
+            .HasIndex(c => c.CodigoHash).IsUnique();
+        modelBuilder.Entity<SesionMovil>()
+            .HasIndex(s => s.TokenHash).IsUnique();
+        modelBuilder.Entity<CodigoActivacionMovil>()
+            .HasOne<Empleado>().WithMany().HasForeignKey(c => c.IdEmpleado)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CodigoActivacionMovil>()
+            .HasOne<Empleado>().WithMany().HasForeignKey(c => c.IdAdministradorGenerador)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<SesionMovil>()
+            .HasOne<Empleado>().WithMany().HasForeignKey(s => s.IdEmpleado)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // La propiedad calculada Id de EntidadBase existe solo para el controlador
         // generico. Se quita del modelo de forma explicita para que EF Core no

@@ -6,7 +6,7 @@ API REST en .NET 8 con Entity Framework Core y SQL Server. Da servicio a tres ap
 |---|---|---|
 | Sitio web público | React + Vite | En desarrollo |
 | Módulo administrador | JavaFX | Por hacer |
-| Módulo trabajador | Android / Kotlin | Por hacer |
+| Módulo trabajador | React Native / Expo | Integración de activación disponible; otras vistas pendientes |
 
 ---
 
@@ -344,6 +344,13 @@ dotnet run
 
 ## 8. Pendientes
 
-- Autenticación de usuario. Hoy la API Key identifica a la **app**, no a la persona. La columna `empleado.token` está lista para agregar JWT cuando haga falta distinguir qué empleado hace cada operación.
+- Autenticación individual: **implementada únicamente en `/api/movil`** mediante activación y tokens personales revocables. El CRUD legado sigue usando API Keys que identifican a la app, NO al empleado; no conectar el CRUD directamente a la APK.
 - Contabilidad distinta de pago y anticipo, pendiente de reunión.
 - Los detalles del trabajo de una cotización van todos dentro de `descripcion`. Si se necesitan consultar por separado, hay que agregar columnas a la tabla.
+
+---
+
+## 9. Integración móvil (ampliación)
+
+Leer primero `README_CAMBIOS_MOVIL.md`, luego `docs/INTEGRACION_MOVIL.md`.
+La migración `db/migraciones/001_acceso_movil.sql` agrega dos tablas SIN borrar los datos existentes. No ejecutar `db/sacor_db.sql` sobre una base con datos.
