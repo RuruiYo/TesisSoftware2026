@@ -29,6 +29,7 @@ public class SacorDbContext : DbContext
     public DbSet<ViajeExtraEmpleado> ViajeExtraEmpleados => Set<ViajeExtraEmpleado>();
     public DbSet<CodigoActivacionMovil> CodigosActivacionMovil => Set<CodigoActivacionMovil>();
     public DbSet<SesionMovil> SesionesMoviles => Set<SesionMovil>();
+    public DbSet<Auditoria> Auditorias => Set<Auditoria>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -70,6 +71,18 @@ public class SacorDbContext : DbContext
         modelBuilder.Entity<Camion>().HasIndex(c => c.Placa).IsUnique();
         modelBuilder.Entity<UsuarioWeb>().HasIndex(u => u.Dui).IsUnique();
         modelBuilder.Entity<PrecioLugar>().HasIndex(p => new { p.Tipo, p.Lugar }).IsUnique();
+
+        // Indice de consulta (no unico): la auditoria siempre se lee filtrando por
+        // tabla y ordenando por fecha. Sin el, cada consulta recorreria toda la tabla,
+        // que es la que mas rapido crece del sistema.
+        modelBuilder.Entity<Auditoria>()
+            .HasIndex(a => new { a.TablaAfectada, a.FechaHora })
+            .HasDatabaseName("IX_auditoria_tabla_fecha");
+
+        // La fecha la pone SQL Server si el INSERT no la trae.
+        modelBuilder.Entity<Auditoria>()
+            .Property(a => a.FechaHora)
+            .HasDefaultValueSql("SYSDATETIME()");
 
         // SEGURIDAD: se desactiva el borrado en cascada en TODAS las relaciones.
         // Con las multiples llaves foraneas que apuntan a empleado, una cascada

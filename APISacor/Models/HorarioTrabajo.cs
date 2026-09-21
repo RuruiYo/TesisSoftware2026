@@ -20,8 +20,10 @@ public class HorarioTrabajo : EntidadBase
     [Column("entrada", TypeName = "time(0)")]
     public TimeSpan Entrada { get; set; }
 
+    // Nulable a proposito: el empleado marca la entrada al llegar y la salida queda
+    // vacia hasta que termina la jornada. Un turno en curso es un registro valido.
     [Column("salida", TypeName = "time(0)")]
-    public TimeSpan Salida { get; set; }
+    public TimeSpan? Salida { get; set; }
 
     [JsonIgnore]
     [ForeignKey(nameof(IdEmpleadoMarco))]

@@ -108,6 +108,32 @@ usuarios-web           cotizaciones          solicitudes-puesto
 observaciones-empleado
 ```
 
+### 4.1.1 Auditoría
+
+`/api/auditoria` es de **solo escritura y lectura**: tiene `GET` y `POST`, pero **no** `PUT` ni `DELETE`. Un historial que se puede editar o borrar no sirve como evidencia.
+
+```
+GET  /api/auditoria?tabla=pesaje&idEmpleado=5&desde=2026-09-01&hasta=2026-09-30
+GET  /api/auditoria/{id}
+POST /api/auditoria
+```
+
+```json
+{
+  "idEmpleado": 5,
+  "tablaAfectada": "pesaje",
+  "idRegistro": "42",
+  "accion": "UPDATE",
+  "valorAnterior": "{\"pesoTotal\":12000}",
+  "valorNuevo": "{\"pesoTotal\":12500}",
+  "detalle": "Correccion por error de digitacion"
+}
+```
+
+`accion` ∈ `INSERT`, `UPDATE`, `DELETE`. La `fechaHora` la pone el servidor: si viniera del cliente, se podrían fabricar registros con fecha falsa. `idEmpleado` puede ir nulo cuando la acción viene del sitio público.
+
+### 4.1.2 Tabla puente
+
 La tabla puente tiene rutas propias por su clave compuesta:
 
 ```
@@ -134,7 +160,7 @@ DELETE /api/viaje-extra-empleados/{idViajeExtra}/{idEmpleado}
 | `empleados` | DUI `00000000-0`; `estado` ∈ Activo, Inactivo, Suspendido; `tipo` ∈ Administrador, Motorista, Tecnico, Ayudante, Mecanico, Coordinador |
 | `clientes` | `tipo` ∈ Natural, Juridico. Natural exige DUI, Jurídico exige NIT |
 | `camiones` | La placa se normaliza a mayúsculas sin espacios |
-| `horarios-trabajo` | La salida debe ser posterior a la entrada; no se aceptan fechas futuras |
+| `horarios-trabajo` | `salida` puede ir nula (turno en curso). Si viene, debe ser posterior a la entrada. No se aceptan fechas futuras |
 | `pagos` | El descuento no puede superar la cantidad |
 | `pesajes` | Peso entre 0 y 100000 |
 | `cotizaciones` | `estado` ∈ Pendiente, EnRevision, Cotizada, Aprobada, Rechazada, Cerrada |
