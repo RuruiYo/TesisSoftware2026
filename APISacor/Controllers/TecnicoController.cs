@@ -2,6 +2,8 @@ using APISacor.Data;
 using APISacor.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
+using APISacor.Models;
 
 namespace APISacor.Controllers;
 
@@ -79,6 +81,153 @@ public sealed class TecnicoController : ControllerBase
             horarios,
             limpiezas,
             pesajes
+        });
+    }
+    // Datos recibidos desde la aplicación.
+    public sealed class PeticionRecoleccion
+    {
+        [Range(1, int.MaxValue)]
+        public int IdServicioContrato { get; set; }
+
+        [Required]
+        [StringLength(1000)]
+        public string Observacion { get; set; } = string.Empty;
+    }
+
+    // GET: api/movil/tecnico/servicios
+    // Devuelve los servicios de las rutas asignadas al técnico.
+    [HttpGet("servicios")]
+    public async Task<IActionResult> MisServicios(
+        CancellationToken ct)
+    {
+        var empleado = await _acceso.IdentificarAsync(Request, ct);
+
+        if (empleado is null)
+            return Unauthorized(new
+            {
+                mensaje = "Sesión inválida o vencida."
+            });
+
+        if (ServicioAccesoMovil.RolApp(empleado.Tipo) != "tecnico")
+            return StatusCode(403, new
+            {
+                mensaje = "No tienes permiso."
+            });
+
+        var servicios = await (
+            from servicio in _db.ServiciosContrato.AsNoTracking()
+
+            join asignacion in _db.RutasEmpleado.AsNoTracking()
+                on servicio.IdRutaTrabajo
+                equals asignacion.IdRutaTrabajo
+
+            join ruta in _db.RutasTrabajo.AsNoTracking()
+                on servicio.IdRutaTrabajo
+                equals ruta.IdRutaTrabajo
+
+            where asignacion.IdEmpleado == empleado.IdEmpleado
+
+            select new
+            {
+                servicio.IdServicioContrato,
+                servicio.IdRutaTrabajo,
+                ruta.Destino
+            }
+        )
+        .Distinct()
+        .OrderBy(s => s.IdServicioContrato)
+        .Take(100)
+        .ToListAsync(ct);
+
+        Response.Headers.CacheControl = "no-store";
+
+        return Ok(servicios);
+    }
+
+    // POST: api/movil/tecnico/recoleccion
+    [HttpPost("recoleccion")]
+    public async Task<IActionResult> RegistrarRecoleccion(
+        [FromBody] PeticionRecoleccion peticion,
+        CancellationToken ct)
+    {
+        var empleado = await _acceso.IdentificarAsync(Request, ct);
+
+        if (empleado is null)
+            return Unauthorized(new
+            {
+                mensaje = "Sesión inválida o vencida."
+            });
+
+        if (ServicioAccesoMovil.RolApp(empleado.Tipo) != "tecnico")
+            return StatusCode(403, new
+            {
+                mensaje = "No tienes permiso."
+            });
+
+        var observacion = peticion.Observacion?.Trim();
+
+        if (string.IsNullOrWhiteSpace(observacion))
+            return BadRequest(new
+            {
+                mensaje = "Debes escribir una observación."
+            });
+
+        // Comprobar que el servicio pertenece a una ruta
+        // realmente asignada al técnico.
+        bool servicioPermitido = await (
+            from servicio in _db.ServiciosContrato
+
+            join asignacion in _db.RutasEmpleado
+                on servicio.IdRutaTrabajo
+                equals asignacion.IdRutaTrabajo
+
+            where servicio.IdServicioContrato
+                    == peticion.IdServicioContrato
+
+                  && asignacion.IdEmpleado
+                    == empleado.IdEmpleado
+
+            select servicio.IdServicioContrato
+        ).AnyAsync(ct);
+
+        if (!servicioPermitido)
+            return BadRequest(new
+            {
+                mensaje = "El servicio no está asignado a este técnico."
+            });
+
+        var fechaLocal = DateTimeOffset.UtcNow
+            .ToOffset(TimeSpan.FromHours(-6))
+            .Date;
+
+        var limpieza = new Limpieza
+        {
+            // El empleado se obtiene de su sesión.
+            IdEmpleadoSubio = empleado.IdEmpleado,
+
+            IdServicioContrato = peticion.IdServicioContrato,
+
+            Fecha = fechaLocal,
+
+            Observacion = observacion,
+
+            Etapa = "Recolección finalizada"
+        };
+
+        _db.Limpiezas.Add(limpieza);
+
+        await _db.SaveChangesAsync(ct);
+
+        Response.Headers.CacheControl = "no-store";
+
+        return Ok(new
+        {
+            limpieza.IdLimpieza,
+            limpieza.IdServicioContrato,
+            limpieza.Fecha,
+            limpieza.Observacion,
+            limpieza.Etapa,
+            mensaje = "Recolección registrada correctamente."
         });
     }
 }
