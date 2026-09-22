@@ -18,7 +18,7 @@ public sealed class TransportistaController : ControllerBase
     private readonly SacorDbContext _db;
     private readonly ServicioAccesoMovil _acceso;
     private static readonly Regex PatronEvidencia = new(
-        @"^\[ENRUTA-EV\|(?<empleado>\d+)\|(?<fecha>\d{17})\] (?<texto>.+)$",
+        @"^\[SACOR-EV\|(?<empleado>\d+)\|(?<fecha>\d{17})\] (?<texto>.+)$",
         RegexOptions.CultureInvariant
     );
     private static readonly Regex PatronInformacion = new(
@@ -306,7 +306,7 @@ public sealed class TransportistaController : ControllerBase
         );
 
         var linea =
-            $"[ENRUTA-EV|{empleado.IdEmpleado}|{marca}] {texto}";
+            $"[SACOR-EV|{empleado.IdEmpleado}|{marca}] {texto}";
 
         // Reintentar si otro usuario modificó la observación
         // mientras estábamos preparando el guardado.
