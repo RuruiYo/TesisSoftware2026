@@ -1,10 +1,11 @@
-IF DB_ID('SACOR') IS NULL
-    CREATE DATABASE SACOR;
+IF DB_ID('sacor') IS NULL
+    CREATE DATABASE sacor;
 GO
 
-USE SACOR;
+USE sacor;
 GO
 
+IF OBJECT_ID('dbo.auditoria', 'U') IS NOT NULL DROP TABLE dbo.auditoria;
 IF OBJECT_ID('dbo.viaje_extra_empleado', 'U') IS NOT NULL DROP TABLE dbo.viaje_extra_empleado;
 IF OBJECT_ID('dbo.observacion_empleado', 'U') IS NOT NULL DROP TABLE dbo.observacion_empleado;
 IF OBJECT_ID('dbo.solicitud_puesto_trabajo', 'U') IS NOT NULL DROP TABLE dbo.solicitud_puesto_trabajo;
@@ -113,7 +114,7 @@ CREATE TABLE horario_trabajo (
     id_empleado_marco INT NOT NULL,
     fecha DATE NOT NULL,
     entrada TIME(0) NOT NULL,
-    salida TIME(0) NOT NULL,
+    salida TIME(0) NULL,
     CONSTRAINT PK_horario_trabajo PRIMARY KEY (id_horario_trabajo),
     CONSTRAINT FK_horario_empleado FOREIGN KEY (id_empleado_marco)
         REFERENCES empleado(id_empleado)
@@ -294,4 +295,23 @@ CREATE TABLE viaje_extra_empleado (
     CONSTRAINT FK_viaje_emp_empleado FOREIGN KEY (id_empleado)
         REFERENCES empleado(id_empleado)
 );
+GO
+
+CREATE TABLE auditoria (
+    id_auditoria INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    id_empleado INT NULL,
+    tabla_afectada NVARCHAR(128) NOT NULL,
+    id_registro NVARCHAR(100) NOT NULL,
+    accion NVARCHAR(10) NOT NULL,
+    fecha_hora DATETIME2(0) NOT NULL DEFAULT SYSDATETIME(),
+    valor_anterior NVARCHAR(MAX) NULL,
+    valor_nuevo NVARCHAR(MAX) NULL,
+    detalle NVARCHAR(1000) NULL,
+    CONSTRAINT FK_auditoria_empleado FOREIGN KEY (id_empleado)
+        REFERENCES empleado(id_empleado),
+    CONSTRAINT CK_auditoria_accion CHECK (accion IN ('INSERT', 'UPDATE', 'DELETE'))
+);
+GO
+
+CREATE INDEX IX_auditoria_tabla_fecha ON auditoria (tabla_afectada, fecha_hora DESC);
 GO
