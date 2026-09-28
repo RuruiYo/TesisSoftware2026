@@ -170,7 +170,7 @@ builder.Services.AddCors(opciones =>
         {
             politica.WithOrigins(origenesPermitidos)
                     .WithHeaders("Content-Type", "X-Api-Key", "Authorization")
-                    .WithMethods("GET", "POST", "PUT", "DELETE");
+                    .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH");
         }
     });
 });
