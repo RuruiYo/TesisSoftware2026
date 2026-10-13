@@ -323,8 +323,7 @@ public sealed class TecnicoController : ControllerBase
                     IdRutaTrabajo = peticion.IdRutaTrabajo,
                     Fecha = fecha,
                     PesoTotal = decimal.Round(carga.Toneladas * ReglasGastoViaje.LibrasPorTonelada, 2),
-                    PrecioTonelada = materiales.First(m => m.IdPrecioLugar == carga.IdPrecioLugar).Precio,
-                    Etapa = "App móvil"
+                    PrecioTonelada = materiales.First(m => m.IdPrecioLugar == carga.IdPrecioLugar).Precio
                 });
             }
 
