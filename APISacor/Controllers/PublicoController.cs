@@ -9,7 +9,7 @@ namespace APISacor.Controllers;
 
 // SEGURIDAD: controlador dedicado al sitio publico. Existe para NO exponerle a la
 // web los controladores CRUD completos: desde aqui solo se puede dar de alta una
-// cotizacion o una solicitud de empleo, nunca leer, modificar ni borrar nada.
+// cotizacion o una solicitud de empleo; la unica lectura es la lista de materiales.
 // Es el principio de menor privilegio aplicado a la superficie del API.
 [ApiController]
 [Route("api/publico")]
@@ -65,6 +65,22 @@ public class PublicoController : ControllerBase
 
         [Required, MaxLength(100)]
         public string TipoPuesto { get; set; } = string.Empty;
+    }
+
+    // GET /api/publico/materiales
+    // SEGURIDAD: solo devuelve los nombres de los tipos de material. Los precios por
+    // tonelada son informacion interna y no se exponen al sitio publico.
+    [HttpGet("materiales")]
+    public async Task<IActionResult> Materiales(CancellationToken ct)
+    {
+        var tipos = await _db.PreciosLugar.AsNoTracking()
+            .Select(p => p.Tipo)
+            .Distinct()
+            .OrderBy(t => t)
+            .Take(50)
+            .ToListAsync(ct);
+
+        return Ok(tipos);
     }
 
     [HttpPost("cotizaciones")]

@@ -5,6 +5,14 @@ GO
 USE sacor;
 GO
 
+IF OBJECT_ID('dbo.FK_ruta_cotizacion', 'F') IS NOT NULL ALTER TABLE dbo.ruta_trabajo DROP CONSTRAINT FK_ruta_cotizacion;
+IF OBJECT_ID('dbo.FK_ruta_contrato', 'F') IS NOT NULL ALTER TABLE dbo.ruta_trabajo DROP CONSTRAINT FK_ruta_contrato;
+IF OBJECT_ID('dbo.FK_ruta_camion', 'F') IS NOT NULL ALTER TABLE dbo.ruta_trabajo DROP CONSTRAINT FK_ruta_camion;
+IF OBJECT_ID('dbo.FK_contrato_cotizacion', 'F') IS NOT NULL ALTER TABLE dbo.servicio_contrato DROP CONSTRAINT FK_contrato_cotizacion;
+IF OBJECT_ID('dbo.gasto_viaje', 'U') IS NOT NULL DROP TABLE dbo.gasto_viaje;
+IF OBJECT_ID('dbo.evidencia_foto', 'U') IS NOT NULL DROP TABLE dbo.evidencia_foto;
+IF OBJECT_ID('dbo.sesion_movil', 'U') IS NOT NULL DROP TABLE dbo.sesion_movil;
+IF OBJECT_ID('dbo.codigo_activacion_movil', 'U') IS NOT NULL DROP TABLE dbo.codigo_activacion_movil;
 IF OBJECT_ID('dbo.auditoria', 'U') IS NOT NULL DROP TABLE dbo.auditoria;
 IF OBJECT_ID('dbo.viaje_extra_empleado', 'U') IS NOT NULL DROP TABLE dbo.viaje_extra_empleado;
 IF OBJECT_ID('dbo.observacion_empleado', 'U') IS NOT NULL DROP TABLE dbo.observacion_empleado;
@@ -41,6 +49,8 @@ CREATE TABLE empleado (
     estado NVARCHAR(20) NOT NULL,
     tipo NVARCHAR(30) NOT NULL,
     id_administrador_registro INT NULL,
+    CONSTRAINT CK_empleado_tipo CHECK (tipo IN ('AdministradorOperativo', 'AdministradorTecnico', 'Tecnico', 'Motorista', 'Ayudante', 'Mecanico', 'Coordinador')),
+    CONSTRAINT CK_empleado_tipo_anterior CHECK (tipo NOT IN ('Ayudante', 'Mecanico', 'Coordinador') OR estado <> 'Activo'),
     CONSTRAINT FK_empleado_registrador FOREIGN KEY (id_administrador_registro)
         REFERENCES empleado(id_empleado)
 );
@@ -70,6 +80,8 @@ CREATE TABLE ruta_trabajo (
     destino NVARCHAR(200) NOT NULL,
     dinero_gasolina DECIMAL(12,2) NULL,
     tipo NVARCHAR(60) NULL,
+    id_servicio_contrato INT NULL,
+    id_camion INT NULL,
     CONSTRAINT FK_ruta_admin FOREIGN KEY (id_administrador)
         REFERENCES empleado(id_empleado)
 );
@@ -174,6 +186,7 @@ CREATE TABLE servicio_contrato (
     observacion NVARCHAR(1000) NULL,
     tipo_transportaje NVARCHAR(80) NULL,
     fecha DATE NULL,
+    id_cotizacion INT NULL,
     CONSTRAINT FK_contrato_ruta FOREIGN KEY (id_ruta_trabajo)
         REFERENCES ruta_trabajo(id_ruta_trabajo),
     CONSTRAINT FK_contrato_cliente FOREIGN KEY (id_cliente)
@@ -186,10 +199,13 @@ GO
 CREATE TABLE limpieza (
     id_limpieza INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
     id_empleado_subio INT NOT NULL,
-    id_servicio_contrato INT NOT NULL,
+    id_servicio_contrato INT NULL,
+    id_ruta_trabajo INT NULL,
     fecha DATE NOT NULL,
     observacion NVARCHAR(1000) NULL,
     etapa NVARCHAR(60) NULL,
+    CONSTRAINT FK_limpieza_ruta FOREIGN KEY (id_ruta_trabajo)
+        REFERENCES ruta_trabajo(id_ruta_trabajo),
     CONSTRAINT FK_limpieza_empleado FOREIGN KEY (id_empleado_subio)
         REFERENCES empleado(id_empleado),
     CONSTRAINT FK_limpieza_contrato FOREIGN KEY (id_servicio_contrato)
@@ -206,6 +222,10 @@ CREATE TABLE pesaje (
     fecha DATE NULL,
     peso_total DECIMAL(12,2) NULL,
     etapa NVARCHAR(60) NULL,
+    id_ruta_trabajo INT NULL,
+    precio_tonelada DECIMAL(12,2) NULL,
+    CONSTRAINT FK_pesaje_ruta FOREIGN KEY (id_ruta_trabajo)
+        REFERENCES ruta_trabajo(id_ruta_trabajo),
     CONSTRAINT FK_pesaje_contrato FOREIGN KEY (id_servicio_contrato)
         REFERENCES servicio_contrato(id_servicio_contrato),
     CONSTRAINT FK_pesaje_empleado_subio FOREIGN KEY (id_empleado_subio)
@@ -226,6 +246,9 @@ CREATE TABLE viaje_extra (
     precio DECIMAL(12,2) NULL,
     pago DECIMAL(12,2) NULL,
     cantidad INT NULL,
+    id_ruta_trabajo INT NULL,
+    CONSTRAINT FK_viaje_extra_ruta FOREIGN KEY (id_ruta_trabajo)
+        REFERENCES ruta_trabajo(id_ruta_trabajo),
     CONSTRAINT FK_viaje_cliente FOREIGN KEY (id_cliente)
         REFERENCES cliente(id_cliente),
     CONSTRAINT FK_viaje_admin FOREIGN KEY (id_administrador)
@@ -314,4 +337,101 @@ CREATE TABLE auditoria (
 GO
 
 CREATE INDEX IX_auditoria_tabla_fecha ON auditoria (tabla_afectada, fecha_hora DESC);
+GO
+
+CREATE TABLE codigo_activacion_movil (
+    id_codigo_activacion INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    id_empleado INT NOT NULL,
+    codigo_hash CHAR(64) NOT NULL,
+    id_administrador_generador INT NULL,
+    creado_utc DATETIME2(0) NOT NULL,
+    expira_utc DATETIME2(0) NOT NULL,
+    usado_utc DATETIME2(0) NULL,
+    revocado_utc DATETIME2(0) NULL,
+    CONSTRAINT UQ_codigo_activacion_movil_hash UNIQUE (codigo_hash),
+    CONSTRAINT FK_codigo_activacion_movil_empleado FOREIGN KEY (id_empleado)
+        REFERENCES empleado(id_empleado),
+    CONSTRAINT FK_codigo_activacion_movil_administrador FOREIGN KEY (id_administrador_generador)
+        REFERENCES empleado(id_empleado)
+);
+GO
+
+CREATE TABLE sesion_movil (
+    id_sesion_movil INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    id_empleado INT NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    creado_utc DATETIME2(0) NOT NULL,
+    expira_utc DATETIME2(0) NOT NULL,
+    revocado_utc DATETIME2(0) NULL,
+    CONSTRAINT UQ_sesion_movil_token UNIQUE (token_hash),
+    CONSTRAINT FK_sesion_movil_empleado FOREIGN KEY (id_empleado)
+        REFERENCES empleado(id_empleado)
+);
+GO
+
+CREATE INDEX IX_sesion_movil_empleado ON sesion_movil (id_empleado, revocado_utc);
+GO
+
+CREATE TABLE evidencia_foto (
+    id_evidencia_foto INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    id_limpieza INT NOT NULL,
+    tipo_contenido NVARCHAR(30) NOT NULL,
+    contenido VARBINARY(MAX) NOT NULL,
+    tamano_bytes INT NOT NULL,
+    creado_utc DATETIME2(0) NOT NULL,
+    CONSTRAINT FK_evidencia_foto_limpieza FOREIGN KEY (id_limpieza)
+        REFERENCES limpieza(id_limpieza),
+    CONSTRAINT CK_evidencia_foto_tipo CHECK (tipo_contenido IN ('image/jpeg', 'image/png')),
+    CONSTRAINT CK_evidencia_foto_tamano CHECK (tamano_bytes BETWEEN 1 AND 3145728)
+);
+GO
+
+CREATE INDEX IX_evidencia_foto_limpieza ON evidencia_foto (id_limpieza);
+GO
+
+ALTER TABLE ruta_trabajo ADD CONSTRAINT FK_ruta_contrato FOREIGN KEY (id_servicio_contrato)
+    REFERENCES servicio_contrato(id_servicio_contrato);
+GO
+
+ALTER TABLE ruta_trabajo ADD CONSTRAINT FK_ruta_camion FOREIGN KEY (id_camion)
+    REFERENCES camion(id_camion);
+GO
+
+ALTER TABLE servicio_contrato ADD CONSTRAINT FK_contrato_cotizacion FOREIGN KEY (id_cotizacion)
+    REFERENCES cotizacion(id_cotizacion);
+GO
+
+CREATE INDEX IX_ruta_trabajo_contrato ON ruta_trabajo (id_servicio_contrato);
+GO
+
+CREATE UNIQUE INDEX UX_contrato_cotizacion ON servicio_contrato (id_cotizacion) WHERE id_cotizacion IS NOT NULL;
+GO
+
+CREATE INDEX IX_limpieza_ruta ON limpieza (id_ruta_trabajo);
+GO
+
+CREATE INDEX IX_viaje_extra_ruta ON viaje_extra (id_ruta_trabajo);
+GO
+
+CREATE TABLE gasto_viaje (
+    id_gasto_viaje INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    id_ruta_trabajo INT NOT NULL,
+    id_empleado INT NOT NULL,
+    fecha DATE NOT NULL,
+    concepto NVARCHAR(40) NOT NULL,
+    monto DECIMAL(12,2) NOT NULL,
+    descripcion NVARCHAR(250) NULL,
+    CONSTRAINT FK_gasto_viaje_ruta FOREIGN KEY (id_ruta_trabajo)
+        REFERENCES ruta_trabajo(id_ruta_trabajo),
+    CONSTRAINT FK_gasto_viaje_empleado FOREIGN KEY (id_empleado)
+        REFERENCES empleado(id_empleado),
+    CONSTRAINT CK_gasto_viaje_concepto CHECK (concepto IN (N'Combustible', N'Peaje', N'Alimentacion', N'Mantenimiento', N'Otro')),
+    CONSTRAINT CK_gasto_viaje_monto CHECK (monto > 0 AND monto <= 100000)
+);
+GO
+
+CREATE INDEX IX_gasto_viaje_ruta ON gasto_viaje (id_ruta_trabajo);
+GO
+
+CREATE INDEX IX_pesaje_ruta ON pesaje (id_ruta_trabajo);
 GO

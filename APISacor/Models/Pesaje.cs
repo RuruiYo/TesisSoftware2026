@@ -34,6 +34,16 @@ public class Pesaje : EntidadBase
     [Column("etapa")]
     public string? Etapa { get; set; }
 
+    // Viaje en el que se movio esta carga (registrada por el tecnico desde el movil).
+    [Column("id_ruta_trabajo")]
+    public int? IdRutaTrabajo { get; set; }
+
+    // Precio por tonelada vigente cuando se registro el pesaje. Se congela aqui para
+    // que cambiar el precio despues no altere ventas que ya ocurrieron.
+    [Range(0, 9999999999.99)]
+    [Column("precio_tonelada", TypeName = "decimal(12,2)")]
+    public decimal? PrecioTonelada { get; set; }
+
     [JsonIgnore]
     [ForeignKey(nameof(IdServicioContrato))]
     public ServicioContrato? ServicioContrato { get; set; }

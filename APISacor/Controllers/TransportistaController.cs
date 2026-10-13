@@ -1,4 +1,5 @@
 using APISacor.Data;
+using APISacor.Models;
 using APISacor.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,31 +18,6 @@ public sealed class TransportistaController : ControllerBase
 {
     private readonly SacorDbContext _db;
     private readonly ServicioAccesoMovil _acceso;
-    private static readonly Regex PatronEvidencia = new(
-        @"^\[SACOR-EV\|(?<empleado>\d+)\|(?<fecha>\d{17})\] (?<texto>.+)$",
-        RegexOptions.CultureInvariant
-    );
-    private static readonly Regex PatronInformacion = new(
-    @"^\[SACOR-OP\|(?<empleado>\d+)\|(?<fecha>\d{17})\] KM=(?<km>[0-9]+(?:\.[0-9]{1,2})?);L=(?<litros>[0-9]+(?:\.[0-9]{1,2})?);USD=(?<gasto>[0-9]+(?:\.[0-9]{1,2})?)$",
-    RegexOptions.CultureInvariant
-);
-
-    private sealed record InformacionAdicionalRespuesta(
-        int IdServicioContrato,
-        string Destino,
-        DateTime FechaUtc,
-        decimal Kilometros,
-        decimal CombustibleLitros,
-        decimal GastoUsd
-    );
-
-    private sealed record EvidenciaRespuesta(
-        int IdServicioContrato,
-        string Destino,
-        DateTime FechaUtc,
-        string Texto
-    );
-
     public TransportistaController(SacorDbContext db, ServicioAccesoMovil acceso)
     {
         _db = db;
@@ -150,12 +126,9 @@ public sealed class TransportistaController : ControllerBase
             });
 
         var servicios = await (
-            from s in _db.ServiciosContrato.AsNoTracking()
+            from s in ConsultasMovil.ServiciosDelEmpleado(_db, empleado.IdEmpleado).AsNoTracking()
             join ruta in _db.RutasTrabajo.AsNoTracking()
                 on s.IdRutaTrabajo equals ruta.IdRutaTrabajo
-            where _db.RutasEmpleado.Any(a =>
-                a.IdRutaTrabajo == s.IdRutaTrabajo &&
-                a.IdEmpleado == empleado.IdEmpleado)
             orderby s.IdServicioContrato descending
             select new
             {
@@ -177,87 +150,46 @@ public sealed class TransportistaController : ControllerBase
     public async Task<IActionResult> Evidencias(CancellationToken ct)
     {
         var empleado = await _acceso.IdentificarAsync(Request, ct);
-
         if (empleado is null)
-            return Unauthorized(new
-            {
-                mensaje = "La sesión es inválida o ha vencido."
-            });
-
+            return Unauthorized(new { mensaje = "La sesión es inválida o ha vencido." });
         if (ServicioAccesoMovil.RolApp(empleado.Tipo) != "transportista")
-            return StatusCode(403, new
-            {
-                mensaje = "No tienes permiso."
-            });
+            return StatusCode(403, new { mensaje = "No tienes permiso." });
 
-        var servicios = await (
-            from s in _db.ServiciosContrato.AsNoTracking()
-            join ruta in _db.RutasTrabajo.AsNoTracking()
-                on s.IdRutaTrabajo equals ruta.IdRutaTrabajo
-            where _db.RutasEmpleado.Any(a =>
-                a.IdRutaTrabajo == s.IdRutaTrabajo &&
-                a.IdEmpleado == empleado.IdEmpleado)
-            orderby s.IdServicioContrato descending
-            select new
-            {
-                s.IdServicioContrato,
-                ruta.Destino,
-                s.Observacion
-            }
+        // SEGURIDAD: solo se devuelven las evidencias que subio el empleado autenticado.
+        var registros = await (
+            from l in _db.Limpiezas.AsNoTracking()
+            join r in _db.RutasTrabajo.AsNoTracking() on l.IdRutaTrabajo equals (int?)r.IdRutaTrabajo
+            where l.IdEmpleadoSubio == empleado.IdEmpleado &&
+                  (l.Etapa == EtapasEvidencia.Limpieza || l.Etapa == EtapasEvidencia.Ruta)
+            orderby l.IdLimpieza descending
+            select new { l.IdLimpieza, r.IdRutaTrabajo, r.Destino, l.Fecha, l.Etapa, l.Observacion }
         ).Take(100).ToListAsync(ct);
 
-        var evidencias = new List<EvidenciaRespuesta>();
-
-        foreach (var servicio in servicios)
-        {
-            var lineas = (servicio.Observacion ?? "")
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (var linea in lineas)
-            {
-                var coincidencia = PatronEvidencia.Match(
-                    linea.TrimEnd('\r')
-                );
-
-                if (!coincidencia.Success)
-                    continue;
-
-                if (!int.TryParse(
-                        coincidencia.Groups["empleado"].Value,
-                        out var autor))
-                    continue;
-
-                // Mostrar solo las evidencias del empleado autenticado.
-                if (autor != empleado.IdEmpleado)
-                    continue;
-
-                var fechaTexto = coincidencia.Groups["fecha"].Value;
-
-                if (!DateTime.TryParseExact(
-                        fechaTexto,
-                        "yyyyMMddHHmmssfff",
-                        CultureInfo.InvariantCulture,
-                        DateTimeStyles.AssumeUniversal |
-                        DateTimeStyles.AdjustToUniversal,
-                        out var fechaUtc))
-                    continue;
-
-                evidencias.Add(new EvidenciaRespuesta(
-                    servicio.IdServicioContrato,
-                    servicio.Destino,
-                    fechaUtc,
-                    coincidencia.Groups["texto"].Value
-                ));
-            }
-        }
+        var ids = registros.Select(r => r.IdLimpieza).ToList();
+        var fotos = await _db.EvidenciasFoto.AsNoTracking()
+            .Where(f => ids.Contains(f.IdLimpieza))
+            .OrderBy(f => f.IdEvidenciaFoto)
+            .Select(f => new { f.IdLimpieza, f.IdEvidenciaFoto })
+            .ToListAsync(ct);
 
         Response.Headers.CacheControl = "no-store";
 
-        return Ok(
-            evidencias.OrderByDescending(e => e.FechaUtc)
-        );
+        return Ok(registros.Select(r =>
+        {
+            var (fechaViaje, destino) = ConsultasMovil.LeerDestino(r.Destino);
+            return new
+            {
+                r.IdLimpieza,
+                r.IdRutaTrabajo,
+                destino,
+                fechaViaje = fechaViaje?.ToString("yyyy-MM-dd"),
+                r.Fecha,
+                tipo = r.Etapa == EtapasEvidencia.Ruta ? "ruta" : "limpieza",
+                texto = r.Observacion ?? string.Empty,
+                fotos = fotos.Where(f => f.IdLimpieza == r.IdLimpieza).Select(f => f.IdEvidenciaFoto).ToList()
+            };
+        }));
     }
-
 
     // POST /api/movil/transportista/evidencias
     [HttpPost("evidencias")]
@@ -266,250 +198,116 @@ public sealed class TransportistaController : ControllerBase
         CancellationToken ct)
     {
         var empleado = await _acceso.IdentificarAsync(Request, ct);
-
         if (empleado is null)
-            return Unauthorized(new
-            {
-                mensaje = "La sesión es inválida o ha vencido."
-            });
-
+            return Unauthorized(new { mensaje = "La sesión es inválida o ha vencido." });
         if (ServicioAccesoMovil.RolApp(empleado.Tipo) != "transportista")
-            return StatusCode(403, new
-            {
-                mensaje = "No tienes permiso."
-            });
+            return StatusCode(403, new { mensaje = "No tienes permiso." });
 
-        var texto = (peticion.Texto ?? "")
-            .Replace('\r', ' ')
-            .Replace('\n', ' ')
-            .Trim();
+        // SEGURIDAD: lista blanca del tipo de evidencia; el texto libre del cliente
+        // nunca llega directo a la columna etapa.
+        var etapa = (peticion.Tipo ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "limpieza" => EtapasEvidencia.Limpieza,
+            "ruta" => EtapasEvidencia.Ruta,
+            _ => null
+        };
+        if (etapa is null)
+            return BadRequest(new { mensaje = "El tipo de evidencia debe ser limpieza o ruta." });
 
+        var texto = (peticion.Texto ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ').Trim();
         if (string.IsNullOrWhiteSpace(texto))
-            return BadRequest(new
-            {
-                mensaje = "Debes escribir la evidencia."
-            });
-
+            return BadRequest(new { mensaje = "Debes escribir la evidencia." });
         if (texto.Length > 500)
-            return BadRequest(new
-            {
-                mensaje = "La evidencia no puede superar 500 caracteres."
-            });
+            return BadRequest(new { mensaje = "La evidencia no puede superar 500 caracteres." });
 
-        var fechaUtc = DateTime.UtcNow;
+        if (!await ConsultasMovil.EstaAsignadoAsync(_db, peticion.IdRutaTrabajo, empleado.IdEmpleado, ct))
+            return NotFound(new { mensaje = "No estás asignado a ese viaje." });
 
-        // La marca permite distinguir las evidencias de
-        // las observaciones normales y reconocer a su autor.
-        var marca = fechaUtc.ToString(
-            "yyyyMMddHHmmssfff",
-            CultureInfo.InvariantCulture
-        );
-
-        var linea =
-            $"[SACOR-EV|{empleado.IdEmpleado}|{marca}] {texto}";
-
-        // Reintentar si otro usuario modificó la observación
-        // mientras estábamos preparando el guardado.
-        for (int intento = 0; intento < 3; intento++)
+        var limpieza = new Limpieza
         {
-            var servicio = await (
-                from s in _db.ServiciosContrato.AsNoTracking()
-                join ruta in _db.RutasTrabajo.AsNoTracking()
-                    on s.IdRutaTrabajo equals ruta.IdRutaTrabajo
-                where s.IdServicioContrato ==
-                    peticion.IdServicioContrato
-                where _db.RutasEmpleado.Any(a =>
-                    a.IdRutaTrabajo == s.IdRutaTrabajo &&
-                    a.IdEmpleado == empleado.IdEmpleado)
-                select new
-                {
-                    s.Observacion,
-                    ruta.Destino
-                }
-            ).FirstOrDefaultAsync(ct);
+            // SEGURIDAD: el autor sale de la sesion, nunca de un id enviado por el celular.
+            IdEmpleadoSubio = empleado.IdEmpleado,
+            IdRutaTrabajo = peticion.IdRutaTrabajo,
+            IdServicioContrato = await ConsultasMovil.ContratoDelViajeAsync(_db, peticion.IdRutaTrabajo, ct),
+            Fecha = ConsultasMovil.HoyLocal(),
+            Observacion = texto,
+            Etapa = etapa
+        };
 
-            if (servicio is null)
-                return NotFound(new
-                {
-                    mensaje = "El servicio no está asignado a este transportista."
-                });
+        _db.Limpiezas.Add(limpieza);
+        await _db.SaveChangesAsync(ct);
 
-            var anterior = servicio.Observacion ?? "";
+        Response.Headers.CacheControl = "no-store";
 
-            var separador = anterior.Length == 0 ||
-                            anterior.EndsWith('\n')
-                ? ""
-                : "\n";
-
-            var nuevo = anterior + separador + linea;
-
-            // No exceder el tamaño del campo existente.
-            if (nuevo.Length > 1000)
-                return Conflict(new
-                {
-                    mensaje = "Las observaciones de este servicio ya no tienen espacio suficiente para otra evidencia."
-                });
-
-            // Actualizar solo si la observación sigue siendo
-            // igual a la que acabamos de consultar.
-            var actualizados = await _db.ServiciosContrato
-                .Where(s =>
-                    s.IdServicioContrato ==
-                        peticion.IdServicioContrato &&
-                    s.Observacion == servicio.Observacion &&
-                    _db.RutasEmpleado.Any(a =>
-                        a.IdRutaTrabajo == s.IdRutaTrabajo &&
-                        a.IdEmpleado == empleado.IdEmpleado))
-                .ExecuteUpdateAsync(
-                    cambios => cambios.SetProperty(
-                        s => s.Observacion,
-                        nuevo
-                    ),
-                    ct
-                );
-
-            if (actualizados == 1)
-            {
-                Response.Headers.CacheControl = "no-store";
-
-                return Ok(new
-                {
-                    idServicioContrato = peticion.IdServicioContrato,
-                    destino = servicio.Destino,
-                    fechaUtc,
-                    texto,
-                    mensaje = "Evidencia guardada correctamente."
-                });
-            }
-        }
-
-        return Conflict(new
+        return Ok(new
         {
-            mensaje = "El servicio fue modificado simultáneamente. Intenta guardar nuevamente."
+            limpieza.IdLimpieza,
+            limpieza.IdRutaTrabajo,
+            limpieza.Fecha,
+            tipo = etapa == EtapasEvidencia.Ruta ? "ruta" : "limpieza",
+            texto,
+            fotos = Array.Empty<int>(),
+            mensaje = "Evidencia guardada correctamente."
         });
     }
 
     public sealed class GuardarEvidenciaTransportista
     {
         [Range(1, int.MaxValue)]
-        public int IdServicioContrato { get; set; }
+        public int IdRutaTrabajo { get; set; }
+
+        [Required]
+        [StringLength(10)]
+        public string Tipo { get; set; } = string.Empty;
 
         [Required]
         [StringLength(500)]
         public string Texto { get; set; } = string.Empty;
     }
+
     // GET /api/movil/transportista/informacion-adicional
     [HttpGet("informacion-adicional")]
-    public async Task<IActionResult> ConsultarInformacionAdicional(
-        CancellationToken ct)
+    public async Task<IActionResult> ConsultarInformacionAdicional(CancellationToken ct)
     {
         var empleado = await _acceso.IdentificarAsync(Request, ct);
-
         if (empleado is null)
-            return Unauthorized(new
-            {
-                mensaje = "La sesión es inválida o ha vencido."
-            });
-
+            return Unauthorized(new { mensaje = "La sesión es inválida o ha vencido." });
         if (ServicioAccesoMovil.RolApp(empleado.Tipo) != "transportista")
-            return StatusCode(403, new
-            {
-                mensaje = "No tienes permiso."
-            });
+            return StatusCode(403, new { mensaje = "No tienes permiso." });
 
-        var servicios = await (
-            from servicio in _db.ServiciosContrato.AsNoTracking()
-
-            join ruta in _db.RutasTrabajo.AsNoTracking()
-                on servicio.IdRutaTrabajo equals ruta.IdRutaTrabajo
-
-            where _db.RutasEmpleado.Any(asignacion =>
-                asignacion.IdRutaTrabajo == servicio.IdRutaTrabajo &&
-                asignacion.IdEmpleado == empleado.IdEmpleado)
-
-            orderby servicio.IdServicioContrato descending
-
-            select new
-            {
-                servicio.IdServicioContrato,
-                ruta.Destino,
-                servicio.Observacion
-            }
-
+        var registros = await (
+            from l in _db.Limpiezas.AsNoTracking()
+            join r in _db.RutasTrabajo.AsNoTracking() on l.IdRutaTrabajo equals (int?)r.IdRutaTrabajo
+            where l.IdEmpleadoSubio == empleado.IdEmpleado && l.Etapa == EtapasEvidencia.InformacionAdicional
+            orderby l.IdLimpieza descending
+            select new { l.IdLimpieza, r.IdRutaTrabajo, r.Destino, l.Fecha, l.Observacion }
         ).Take(100).ToListAsync(ct);
 
-        var registros = new List<InformacionAdicionalRespuesta>();
-
-        foreach (var servicio in servicios)
+        var respuesta = new List<object>();
+        foreach (var r in registros)
         {
-            var lineas = (servicio.Observacion ?? "")
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var match = PatronInformacion.Match(r.Observacion ?? string.Empty);
+            if (!match.Success)
+                continue;
 
-            foreach (var linea in lineas)
+            var (fechaViaje, destino) = ConsultasMovil.LeerDestino(r.Destino);
+            respuesta.Add(new
             {
-                var coincidencia = PatronInformacion.Match(
-                    linea.TrimEnd('\r')
-                );
-
-                if (!coincidencia.Success)
-                    continue;
-
-                if (!int.TryParse(
-                    coincidencia.Groups["empleado"].Value,
-                    out var idAutor))
-                    continue;
-
-                // Solo información registrada por este transportista.
-                if (idAutor != empleado.IdEmpleado)
-                    continue;
-
-                if (!DateTime.TryParseExact(
-                    coincidencia.Groups["fecha"].Value,
-                    "yyyyMMddHHmmssfff",
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.AssumeUniversal |
-                    DateTimeStyles.AdjustToUniversal,
-                    out var fechaUtc))
-                    continue;
-
-                if (!decimal.TryParse(
-                    coincidencia.Groups["km"].Value,
-                    NumberStyles.AllowDecimalPoint,
-                    CultureInfo.InvariantCulture,
-                    out var kilometros))
-                    continue;
-
-                if (!decimal.TryParse(
-                    coincidencia.Groups["litros"].Value,
-                    NumberStyles.AllowDecimalPoint,
-                    CultureInfo.InvariantCulture,
-                    out var litros))
-                    continue;
-
-                if (!decimal.TryParse(
-                    coincidencia.Groups["gasto"].Value,
-                    NumberStyles.AllowDecimalPoint,
-                    CultureInfo.InvariantCulture,
-                    out var gasto))
-                    continue;
-
-                registros.Add(new InformacionAdicionalRespuesta(
-                    servicio.IdServicioContrato,
-                    servicio.Destino,
-                    fechaUtc,
-                    kilometros,
-                    litros,
-                    gasto
-                ));
-            }
+                r.IdLimpieza,
+                r.IdRutaTrabajo,
+                destino,
+                fechaViaje = fechaViaje?.ToString("yyyy-MM-dd"),
+                r.Fecha,
+                kilometros = decimal.Parse(match.Groups["km"].Value, CultureInfo.InvariantCulture),
+                combustibleLitros = decimal.Parse(match.Groups["litros"].Value, CultureInfo.InvariantCulture),
+                gastoUsd = decimal.Parse(match.Groups["gasto"].Value, CultureInfo.InvariantCulture)
+            });
         }
 
         Response.Headers.CacheControl = "no-store";
-
-        return Ok(
-            registros.OrderByDescending(r => r.FechaUtc)
-        );
+        return Ok(respuesta);
     }
+
     // POST /api/movil/transportista/informacion-adicional
     [HttpPost("informacion-adicional")]
     public async Task<IActionResult> RegistrarInformacionAdicional(
@@ -517,185 +315,87 @@ public sealed class TransportistaController : ControllerBase
         CancellationToken ct)
     {
         var empleado = await _acceso.IdentificarAsync(Request, ct);
-
         if (empleado is null)
-            return Unauthorized(new
-            {
-                mensaje = "La sesión es inválida o ha vencido."
-            });
-
+            return Unauthorized(new { mensaje = "La sesión es inválida o ha vencido." });
         if (ServicioAccesoMovil.RolApp(empleado.Tipo) != "transportista")
-            return StatusCode(403, new
-            {
-                mensaje = "No tienes permiso."
-            });
+            return StatusCode(403, new { mensaje = "No tienes permiso." });
 
-        if (peticion.IdServicioContrato <= 0)
-            return BadRequest(new
-            {
-                mensaje = "Selecciona un servicio válido."
-            });
+        if (peticion.IdRutaTrabajo <= 0)
+            return BadRequest(new { mensaje = "Selecciona un viaje válido." });
 
-        if (
-            peticion.Kilometros < 0 ||
-            peticion.CombustibleLitros < 0 ||
-            peticion.GastoUsd < 0 ||
+        // SEGURIDAD: rangos y precision acotados para no guardar valores absurdos.
+        if (peticion.Kilometros < 0 || peticion.CombustibleLitros < 0 || peticion.GastoUsd < 0 ||
+            peticion.Kilometros > 1000000 || peticion.CombustibleLitros > 1000000 || peticion.GastoUsd > 1000000)
+            return BadRequest(new { mensaje = "Los valores deben estar entre 0 y 1,000,000." });
 
-            peticion.Kilometros > 1000000 ||
-            peticion.CombustibleLitros > 1000000 ||
-            peticion.GastoUsd > 1000000
-        )
-        {
-            return BadRequest(new
-            {
-                mensaje = "Los valores deben estar entre 0 y 1,000,000."
-            });
-        }
-
-        if (
-            decimal.Round(peticion.Kilometros, 2) != peticion.Kilometros ||
+        if (decimal.Round(peticion.Kilometros, 2) != peticion.Kilometros ||
             decimal.Round(peticion.CombustibleLitros, 2) != peticion.CombustibleLitros ||
-            decimal.Round(peticion.GastoUsd, 2) != peticion.GastoUsd
-        )
+            decimal.Round(peticion.GastoUsd, 2) != peticion.GastoUsd)
+            return BadRequest(new { mensaje = "Utiliza un máximo de dos decimales." });
+
+        if (peticion.Kilometros == 0 && peticion.CombustibleLitros == 0 && peticion.GastoUsd == 0)
+            return BadRequest(new { mensaje = "Debes registrar al menos un valor mayor que cero." });
+
+        if (!await ConsultasMovil.EstaAsignadoAsync(_db, peticion.IdRutaTrabajo, empleado.IdEmpleado, ct))
+            return NotFound(new { mensaje = "No estás asignado a ese viaje." });
+
+        var km = peticion.Kilometros.ToString("0.##", CultureInfo.InvariantCulture);
+        var litros = peticion.CombustibleLitros.ToString("0.##", CultureInfo.InvariantCulture);
+        var gasto = peticion.GastoUsd.ToString("0.##", CultureInfo.InvariantCulture);
+
+        var limpieza = new Limpieza
         {
-            return BadRequest(new
+            IdEmpleadoSubio = empleado.IdEmpleado,
+            IdRutaTrabajo = peticion.IdRutaTrabajo,
+            IdServicioContrato = await ConsultasMovil.ContratoDelViajeAsync(_db, peticion.IdRutaTrabajo, ct),
+            Fecha = ConsultasMovil.HoyLocal(),
+            Observacion = $"KM={km};L={litros};USD={gasto}",
+            Etapa = EtapasEvidencia.InformacionAdicional
+        };
+
+        _db.Limpiezas.Add(limpieza);
+
+        // El gasto del viaje tambien entra a gasto_viaje para que la app de
+        // escritorio lo sume a los gastos de la empresa.
+        if (peticion.GastoUsd > 0)
+        {
+            _db.GastosViaje.Add(new GastoViaje
             {
-                mensaje = "Utiliza un máximo de dos decimales."
+                IdRutaTrabajo = peticion.IdRutaTrabajo,
+                IdEmpleado = empleado.IdEmpleado,
+                Fecha = ConsultasMovil.HoyLocal(),
+                Concepto = "Combustible",
+                Monto = peticion.GastoUsd,
+                Descripcion = $"{km} km, {litros} L"
             });
         }
 
-        if (
-            peticion.Kilometros == 0 &&
-            peticion.CombustibleLitros == 0 &&
-            peticion.GastoUsd == 0
-        )
+        await _db.SaveChangesAsync(ct);
+
+        Response.Headers.CacheControl = "no-store";
+
+        return Ok(new
         {
-            return BadRequest(new
-            {
-                mensaje = "Debes registrar al menos un valor mayor que cero."
-            });
-        }
-
-        var fechaUtc = DateTime.UtcNow;
-
-        var marca = fechaUtc.ToString(
-            "yyyyMMddHHmmssfff",
-            CultureInfo.InvariantCulture
-        );
-
-        var km = peticion.Kilometros.ToString(
-            "0.##",
-            CultureInfo.InvariantCulture
-        );
-
-        var litros = peticion.CombustibleLitros.ToString(
-            "0.##",
-            CultureInfo.InvariantCulture
-        );
-
-        var gasto = peticion.GastoUsd.ToString(
-            "0.##",
-            CultureInfo.InvariantCulture
-        );
-
-        // Formato distinto del utilizado por las evidencias.
-        var linea =
-            $"[SACOR-OP|{empleado.IdEmpleado}|{marca}] KM={km};L={litros};USD={gasto}";
-
-        // Hasta tres intentos por modificaciones simultáneas.
-        for (var intento = 0; intento < 3; intento++)
-        {
-            var servicio = await (
-                from contrato in _db.ServiciosContrato.AsNoTracking()
-
-                join ruta in _db.RutasTrabajo.AsNoTracking()
-                    on contrato.IdRutaTrabajo equals ruta.IdRutaTrabajo
-
-                where contrato.IdServicioContrato ==
-                    peticion.IdServicioContrato
-
-                where _db.RutasEmpleado.Any(asignacion =>
-                    asignacion.IdRutaTrabajo == contrato.IdRutaTrabajo &&
-                    asignacion.IdEmpleado == empleado.IdEmpleado)
-
-                select new
-                {
-                    contrato.Observacion,
-                    ruta.Destino
-                }
-
-            ).FirstOrDefaultAsync(ct);
-
-            if (servicio is null)
-                return NotFound(new
-                {
-                    mensaje = "El servicio no está asignado a este transportista."
-                });
-
-            var anterior = servicio.Observacion ?? "";
-
-            var separador =
-                anterior.Length == 0 || anterior.EndsWith('\n')
-                    ? ""
-                    : "\n";
-
-            var nuevo = anterior + separador + linea;
-
-            if (nuevo.Length > 1000)
-                return Conflict(new
-                {
-                    mensaje = "Este servicio ya no tiene espacio para más registros en observaciones."
-                });
-
-            // Evita sobrescribir observaciones modificadas por otra petición.
-            var actualizados = await _db.ServiciosContrato
-                .Where(contrato =>
-                    contrato.IdServicioContrato ==
-                        peticion.IdServicioContrato &&
-
-                    contrato.Observacion == servicio.Observacion &&
-
-                    _db.RutasEmpleado.Any(asignacion =>
-                        asignacion.IdRutaTrabajo == contrato.IdRutaTrabajo &&
-                        asignacion.IdEmpleado == empleado.IdEmpleado)
-                )
-                .ExecuteUpdateAsync(
-                    cambios => cambios.SetProperty(
-                        contrato => contrato.Observacion,
-                        nuevo
-                    ),
-                    ct
-                );
-
-            if (actualizados == 1)
-            {
-                Response.Headers.CacheControl = "no-store";
-
-                return Ok(new InformacionAdicionalRespuesta(
-                    peticion.IdServicioContrato,
-                    servicio.Destino,
-                    fechaUtc,
-                    peticion.Kilometros,
-                    peticion.CombustibleLitros,
-                    peticion.GastoUsd
-                ));
-            }
-        }
-
-        return Conflict(new
-        {
-            mensaje = "El servicio fue modificado. Intenta guardar nuevamente."
+            limpieza.IdLimpieza,
+            limpieza.IdRutaTrabajo,
+            limpieza.Fecha,
+            kilometros = peticion.Kilometros,
+            combustibleLitros = peticion.CombustibleLitros,
+            gastoUsd = peticion.GastoUsd,
+            mensaje = "Información guardada correctamente."
         });
     }
+
     public sealed class RegistrarInformacionAdicionalPeticion
     {
-        public int IdServicioContrato { get; set; }
-
+        public int IdRutaTrabajo { get; set; }
         public decimal Kilometros { get; set; }
-
         public decimal CombustibleLitros { get; set; }
-
         public decimal GastoUsd { get; set; }
     }
 
+    private static readonly Regex PatronInformacion = new(
+        @"^KM=(?<km>[0-9]+(?:\.[0-9]{1,2})?);L=(?<litros>[0-9]+(?:\.[0-9]{1,2})?);USD=(?<gasto>[0-9]+(?:\.[0-9]{1,2})?)$",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(200));
 }

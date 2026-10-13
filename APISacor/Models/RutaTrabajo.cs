@@ -27,6 +27,14 @@ public class RutaTrabajo : EntidadBase
     [Column("tipo")]
     public string? Tipo { get; set; }
 
+    // Contrato al que pertenece este viaje. Nulo en las salidas sueltas creadas a mano.
+    [Column("id_servicio_contrato")]
+    public int? IdServicioContrato { get; set; }
+
+    // Camion que sale en este viaje, si ya se definio.
+    [Column("id_camion")]
+    public int? IdCamion { get; set; }
+
     [JsonIgnore]
     [ForeignKey(nameof(IdAdministrador))]
     public Empleado? Administrador { get; set; }

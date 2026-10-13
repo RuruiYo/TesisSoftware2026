@@ -19,11 +19,13 @@ public sealed class ServicioAccesoMovil
     public static string Hash(string valor) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(valor)));
 
-    public static string? RolApp(string tipo) => tipo.ToUpperInvariant() switch
+    // SEGURIDAD: solo tres tipos entran a la app movil. El administrador operativo
+    // trabaja en la app de escritorio y aqui no obtiene sesion.
+    public static string? RolApp(string tipo) => TiposEmpleado.Normalizar(tipo) switch
     {
-        "MOTORISTA" => "transportista",
-        "TECNICO" => "tecnico",
-        "ADMINISTRADOR" => "administrador",
+        TiposEmpleado.Motorista => "transportista",
+        TiposEmpleado.Tecnico => "tecnico",
+        TiposEmpleado.AdministradorTecnico => "administrador",
         _ => null
     };
 

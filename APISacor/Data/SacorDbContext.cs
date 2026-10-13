@@ -30,6 +30,8 @@ public class SacorDbContext : DbContext
     public DbSet<CodigoActivacionMovil> CodigosActivacionMovil => Set<CodigoActivacionMovil>();
     public DbSet<SesionMovil> SesionesMoviles => Set<SesionMovil>();
     public DbSet<Auditoria> Auditorias => Set<Auditoria>();
+    public DbSet<EvidenciaFoto> EvidenciasFoto => Set<EvidenciaFoto>();
+    public DbSet<GastoViaje> GastosViaje => Set<GastoViaje>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,6 +55,12 @@ public class SacorDbContext : DbContext
         modelBuilder.Entity<SesionMovil>()
             .HasOne<Empleado>().WithMany().HasForeignKey(s => s.IdEmpleado)
             .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<EvidenciaFoto>()
+            .HasOne<Limpieza>().WithMany().HasForeignKey(f => f.IdLimpieza)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<EvidenciaFoto>()
+            .HasIndex(f => f.IdLimpieza)
+            .HasDatabaseName("IX_evidencia_foto_limpieza");
 
         // La propiedad calculada Id de EntidadBase existe solo para el controlador
         // generico. Se quita del modelo de forma explicita para que EF Core no

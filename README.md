@@ -379,4 +379,50 @@ dotnet run
 ## 9. Integración móvil (ampliación)
 
 Leer primero `README_CAMBIOS_MOVIL.md`, luego `docs/INTEGRACION_MOVIL.md`.
-La migración `db/migraciones/001_acceso_movil.sql` agrega dos tablas SIN borrar los datos existentes. No ejecutar `db/sacor_db.sql` sobre una base con datos.
+La migración `db/agregar_tablas_movil.sql` agrega las tablas `sesion_movil`, `codigo_activacion_movil` y `evidencia_foto` SIN borrar los datos existentes; se puede correr varias veces. No ejecutar `db/sacor_db.sql` sobre una base con datos.
+
+### 9.1 Evidencias y fotos
+
+Todas las evidencias de la app móvil se guardan como filas de `limpieza`, diferenciadas por `etapa`:
+
+| etapa | Quién | Endpoint |
+|---|---|---|
+| Evidencia de limpieza | Transportista (UC-06) | `POST /api/movil/transportista/evidencias` con `tipo: "limpieza"` |
+| Evidencia de ruta | Transportista (UC-07) | `POST /api/movil/transportista/evidencias` con `tipo: "ruta"` |
+| Información adicional | Transportista | `POST /api/movil/transportista/informacion-adicional` (km, litros, gasto) |
+| Recolección finalizada | Técnico (UC-10/11) | `POST /api/movil/tecnico/recoleccion` |
+
+Fotos: `POST /api/movil/evidencias/{idLimpieza}/fotos` con `{ "contenidoBase64": "..." }` (JPG o PNG, máx. 3 MB, 3 por evidencia, solo el autor). `GET /api/movil/fotos/{idFoto}` devuelve la imagen al autor o a un administrador.
+
+Los viajes extra y servicios externos creados desde el móvil se guardan con el prefijo `[aaaa-mm]` para que la app de escritorio los cuente en su mes.
+
+### 9.2 Tipos de usuario
+
+| Tipo (valor en `empleado.tipo`) | App | Qué hace |
+|---|---|---|
+| `AdministradorOperativo` | Escritorio | Planilla, pesaje, contabilidad, clientes, cotizaciones, salidas |
+| `AdministradorTecnico` | Móvil (rol `administrador`) | Registra personal de campo, crea y asigna viajes, servicios externos |
+| `Tecnico` | Móvil (rol `tecnico`) | Horarios, recolección y sus fotos |
+| `Motorista` | Móvil (rol `transportista`) | Horarios, evidencias de limpieza y ruta, información adicional, historial |
+
+`Ayudante`, `Mecanico` y `Coordinador` ya no existen: se conservan solo para empleados inactivos (la API y un CHECK de la base impiden activarlos). Desde el móvil el administrador técnico solo crea y cambia el estado de motoristas y técnicos.
+
+### 9.3 Contratos, viajes y personal
+
+Un contrato (`servicio_contrato`) tiene varios viajes (`ruta_trabajo.id_servicio_contrato`) y cada viaje tiene su personal (`ruta_empleado`) y su camión (`ruta_trabajo.id_camion`). Las evidencias, la información adicional y las recolecciones se guardan por viaje (`limpieza.id_ruta_trabajo`).
+
+| Endpoint | Quién | Qué hace |
+|---|---|---|
+| `POST /api/cotizaciones/{id}/generar-viajes` | Escritorio (API Key) | Al aprobar una cotización: crea cliente, precio, contrato (`id_cotizacion`) y sus viajes con fecha según la frecuencia. Una sola vez por cotización. |
+| `GET /api/movil/admin/contratos` | Administrador técnico | Contratos con viajes y cuántos tienen personal |
+| `GET /api/movil/admin/contratos/{id}/viajes` | Administrador técnico | Viajes del contrato con fecha, personal, camión y evidencias |
+| `PUT /api/movil/admin/viajes/{id}/asignacion` | Administrador técnico | `{ idEmpleados, idCamion }` reemplaza el personal de un viaje |
+| `POST /api/movil/admin/contratos/{id}/asignar` | Administrador técnico | Igual, para todos los viajes del contrato (`soloSinPersonal: true` para solo los vacíos) |
+| `GET /api/movil/viajes` | Motorista y técnico | Calendario: sus viajes con fecha, cliente, camión, equipo y evidencias |
+| `POST /api/movil/transportista/evidencias` | Motorista | `{ idRutaTrabajo, tipo, texto }` |
+| `POST /api/movil/transportista/informacion-adicional` | Motorista | `{ idRutaTrabajo, kilometros, combustibleLitros, gastoUsd }` |
+| `GET /api/movil/tecnico/viajes/{id}/materiales` | Técnico | Materiales (precios por tonelada de la plaza del contrato) y conceptos de gasto |
+| `POST /api/movil/tecnico/recoleccion` | Técnico | `{ idRutaTrabajo, observacion, cargas: [{ idPrecioLugar, toneladas }], gastos: [{ concepto, monto, descripcion }] }`. Cada carga crea un `pesaje` (toneladas × 2200 libras) y cada gasto un `gasto_viaje` |
+| `GET /api/movil/tecnico/registros` | Técnico | Historial por viaje: cargas con su cobro, gastos y observaciones |
+
+Solo se puede registrar algo en un viaje al que el empleado está asignado. Los gastos de `gasto_viaje` (también el gasto de la información adicional del motorista) suman en la app de escritorio como "Gastos de viajes"; el CRUD es `/api/gastos-viaje`.

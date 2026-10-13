@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
@@ -19,15 +19,10 @@ public sealed class AdminController : ControllerBase
     private readonly SacorDbContext _db;
     private readonly ServicioAccesoMovil _acceso;
 
-    private static readonly string[] TiposPermitidos =
-    {
-        "Administrador",
-        "Motorista",
-        "Tecnico",
-        "Ayudante",
-        "Mecanico",
-        "Coordinador"
-    };
+    // SEGURIDAD: minimo privilegio. Desde el movil el administrador tecnico solo
+    // registra y gestiona personal de campo; los administradores se crean y se
+    // administran en la app de escritorio.
+    private static readonly string[] TiposPermitidos = { TiposEmpleado.Motorista, TiposEmpleado.Tecnico };
 
     private static readonly string[] EstadosPermitidos =
     {
@@ -63,10 +58,7 @@ public sealed class AdminController : ControllerBase
         string tipo,
         CancellationToken ct)
     {
-        var esAdmin = tipo.Equals(
-            "Administrador",
-            StringComparison.OrdinalIgnoreCase
-        );
+        var esAdmin = TiposEmpleado.EsAdministrador(tipo);
 
         var minimo = esAdmin ? 100000 : 1000;
         var maximo = esAdmin ? 1000000 : 10000;
@@ -137,7 +129,7 @@ public sealed class AdminController : ControllerBase
         public int IdCamion { get; set; }
 
         [Required]
-        [MaxLength(60)]
+        [MaxLength(50)]
         public string Tipo { get; set; } = string.Empty;
 
         [Range(0, 9999999999.99)]
@@ -156,7 +148,7 @@ public sealed class AdminController : ControllerBase
     public sealed class CrearServicioExternoPeticion
     {
         [Required]
-        [MaxLength(150)]
+        [MaxLength(140)]
         public string Nombre { get; set; } = string.Empty;
 
         [Range(0, 9999999999.99)]
@@ -164,6 +156,17 @@ public sealed class AdminController : ControllerBase
 
         [MaxLength(250)]
         public string? Direccion { get; set; }
+    }
+
+    // La app de escritorio agrupa viajes extra y servicios externos por mes
+    // leyendo el prefijo "[aaaa-mm]" del texto, porque esas tablas no tienen fecha.
+    private static string ConMes(string texto)
+    {
+        if (System.Text.RegularExpressions.Regex.IsMatch(texto, @"^\[\d{4}-\d{2}(-\d{2})?\]"))
+            return texto;
+
+        var hoy = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-6));
+        return $"[{hoy:yyyy-MM}] {texto}";
     }
 
     // -------------------------------------------------
@@ -406,7 +409,8 @@ public sealed class AdminController : ControllerBase
         }
 
         var actualizados = await _db.Empleados
-            .Where(e => e.IdEmpleado == id)
+            .Where(e => e.IdEmpleado == id &&
+                        (e.Tipo == TiposEmpleado.Motorista || e.Tipo == TiposEmpleado.Tecnico))
             .ExecuteUpdateAsync(
                 cambios => cambios.SetProperty(
                     e => e.Estado,
@@ -418,7 +422,7 @@ public sealed class AdminController : ControllerBase
         if (actualizados == 0)
             return NotFound(new
             {
-                mensaje = "El empleado no existe."
+                mensaje = "El empleado no existe o no es personal de campo."
             });
 
         return Ok(new
@@ -681,7 +685,7 @@ public sealed class AdminController : ControllerBase
             IdCliente = peticion.IdCliente,
             IdAdministrador = admin.IdEmpleado,
             IdCamion = peticion.IdCamion,
-            Tipo = tipo,
+            Tipo = ConMes(tipo),
             Precio = peticion.Precio,
             PagoMonto = peticion.PagoMonto,
             Cantidad = peticion.Cantidad
@@ -777,7 +781,7 @@ public sealed class AdminController : ControllerBase
         var servicio = new ServicioExterno
         {
             IdAdministrador = admin.IdEmpleado,
-            Nombre = nombre,
+            Nombre = ConMes(nombre),
             CantidadPago = peticion.CantidadPago,
 
             Direccion = string.IsNullOrWhiteSpace(

@@ -36,6 +36,10 @@ public class ViajeExtra : EntidadBase
     [Column("cantidad")]
     public int? Cantidad { get; set; }
 
+    // Viaje del contrato que se creo para este imprevisto (aparece en el calendario).
+    [Column("id_ruta_trabajo")]
+    public int? IdRutaTrabajo { get; set; }
+
     [JsonIgnore]
     [ForeignKey(nameof(IdCliente))]
     public Cliente? Cliente { get; set; }

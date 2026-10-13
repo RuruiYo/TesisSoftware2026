@@ -15,7 +15,11 @@ public class Limpieza : EntidadBase
     public int IdEmpleadoSubio { get; set; }
 
     [Column("id_servicio_contrato")]
-    public int IdServicioContrato { get; set; }
+    public int? IdServicioContrato { get; set; }
+
+    // Viaje (ruta_trabajo) al que pertenece la evidencia o el registro.
+    [Column("id_ruta_trabajo")]
+    public int? IdRutaTrabajo { get; set; }
 
     [Column("fecha", TypeName = "date")]
     public DateTime Fecha { get; set; }

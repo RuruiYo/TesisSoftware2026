@@ -31,6 +31,10 @@ public class ServicioContrato : EntidadBase
     [Column("fecha", TypeName = "date")]
     public DateTime? Fecha { get; set; }
 
+    // Cotizacion web de la que nacio el contrato. Nulo en los contratos creados a mano.
+    [Column("id_cotizacion")]
+    public int? IdCotizacion { get; set; }
+
     [JsonIgnore]
     [ForeignKey(nameof(IdRutaTrabajo))]
     public RutaTrabajo? RutaTrabajo { get; set; }

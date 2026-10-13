@@ -1,6 +1,7 @@
 using APISacor.Data;
 using APISacor.Models;
 using APISacor.Security;
+using APISacor.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace APISacor.Controllers;
@@ -15,8 +16,6 @@ public class EmpleadosController : BaseCrudController<Empleado>
     // libres, cualquier app consumidora podria inventarse el tipo "superadmin" y
     // la logica de permisos de las otras dos apps quedaria burlada.
     private static readonly string[] EstadosPermitidos = { "Activo", "Inactivo", "Suspendido" };
-    private static readonly string[] TiposPermitidos =
-        { "Administrador", "Motorista", "Tecnico", "Ayudante", "Mecanico", "Coordinador" };
 
     protected override string? ValidarReglasPropias(Empleado entidad)
     {
@@ -29,8 +28,10 @@ public class EmpleadosController : BaseCrudController<Empleado>
         if (!EstadosPermitidos.Contains(entidad.Estado, StringComparer.OrdinalIgnoreCase))
             return $"El estado debe ser uno de: {string.Join(", ", EstadosPermitidos)}.";
 
-        if (!TiposPermitidos.Contains(entidad.Tipo, StringComparer.OrdinalIgnoreCase))
-            return $"El tipo debe ser uno de: {string.Join(", ", TiposPermitidos)}.";
+        var errorTipo = TiposEmpleado.Validar(entidad.Tipo, entidad.Estado);
+        if (errorTipo is not null)
+            return errorTipo;
+        entidad.Tipo = TiposEmpleado.Normalizar(entidad.Tipo)!;
 
         // SEGURIDAD: se valida el rango de fecha para que no entren registros con
         // fechas imposibles que despues rompan los calculos de antiguedad.
