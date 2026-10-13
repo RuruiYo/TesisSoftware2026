@@ -11,7 +11,7 @@ git clone https://github.com/RuruiYo/TesisSoftware2026.git
 cd TesisSoftware2026/APISacor
 ```
 
-1. Abrí `db/sacor_db.sql` en SSMS y ejecutalo (F5). Crea la base `sacor` con sus 20 tablas.
+1. Abrí `db/sacor_completo.sql` en SSMS y ejecutalo (F5). Crea la base `sacor` con sus 25 tablas, los procedimientos y un usuario de cada tipo (códigos `710245`, `820376`, `3104`, `4215`).
 2. Copiá `appsettings.Development.json.ejemplo` → `appsettings.Development.json` y cambiá `NOMBRE_DE_TU_SERVIDOR` por tu instancia (la ves en la barra de título de SSMS).
 3. Generá tu llave y guardala:
 

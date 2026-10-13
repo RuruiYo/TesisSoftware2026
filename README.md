@@ -20,7 +20,7 @@ API REST en .NET 8 con Entity Framework Core y SQL Server. Da servicio a tres ap
 
 ### 2.1 Crear la base de datos
 
-Abrí `db/sacor_db.sql` en SSMS y ejecutalo completo (F5). Crea la base `sacor` con sus 20 tablas.
+Abrí `db/sacor_completo.sql` en SSMS y ejecutalo completo (F5). Crea la base `sacor` con sus 25 tablas, 13 procedimientos almacenados y un usuario de cada tipo para probar (códigos `710245`, `820376`, `3104`, `4215`). **Borra la base si ya existe**: no correrlo sobre una base con datos reales.
 
 > El script arranca borrando las tablas si ya existen. No lo vuelvas a correr cuando tengas datos que quieras conservar.
 
@@ -360,7 +360,7 @@ Tus compañeros después:
 git clone https://github.com/USUARIO/REPO.git
 cd REPO/APISacor
 # copiar appsettings.Development.json.ejemplo y ajustar el servidor
-# correr db/sacor_db.sql en SSMS
+# correr db/sacor_completo.sql en SSMS
 dotnet user-secrets init
 dotnet user-secrets set "Seguridad:ApiKeys:AppEscritorio" "su-llave"
 dotnet run
@@ -379,7 +379,9 @@ dotnet run
 ## 9. Integración móvil (ampliación)
 
 Leer primero `README_CAMBIOS_MOVIL.md`, luego `docs/INTEGRACION_MOVIL.md`.
-La migración `db/agregar_tablas_movil.sql` agrega las tablas `sesion_movil`, `codigo_activacion_movil` y `evidencia_foto` SIN borrar los datos existentes; se puede correr varias veces. No ejecutar `db/sacor_db.sql` sobre una base con datos.
+Toda la base está en un solo archivo: `db/sacor_completo.sql` (tablas, relaciones, índices, procedimientos y datos iniciales). No ejecutarlo sobre una base con datos porque la recrea desde cero.
+
+Los 13 procedimientos almacenados del script no los usa la API (trabaja con Entity Framework); quedan como respaldo para operaciones directas en SQL Server y aplican las mismas reglas.
 
 ### 9.1 Evidencias y fotos
 
