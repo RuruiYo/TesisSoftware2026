@@ -3,6 +3,7 @@ using System.Text.Json;
 
 using APISacor.Data;
 using APISacor.Models;
+using APISacor.Security;
 using APISacor.Services;
 
 using Microsoft.AspNetCore.Mvc;
@@ -47,14 +48,26 @@ public sealed class CotizacionViajesController : ControllerBase
         [StringLength(20)]
         public string Frecuencia { get; set; } = string.Empty;
 
-        [Range(0, 9999999999.99)]
-        public decimal Precio { get; set; }
+        [Required]
+        [MinLength(1)]
+        [MaxLength(20)]
+        public List<PrecioMaterial> Precios { get; set; } = new();
 
         [StringLength(120)]
         public string? Lugar { get; set; }
 
         [StringLength(70)]
         public string? Destino { get; set; }
+    }
+
+    public sealed class PrecioMaterial
+    {
+        [Required]
+        [StringLength(60)]
+        public string Tipo { get; set; } = string.Empty;
+
+        [Range(0, 9999999999.99)]
+        public decimal Precio { get; set; }
     }
 
     // POST /api/cotizaciones/{id}/generar-viajes
@@ -69,14 +82,13 @@ public sealed class CotizacionViajesController : ControllerBase
         if (peticion.FechaInicio.Date < DateTime.Today.AddYears(-1) || peticion.FechaInicio.Date > DateTime.Today.AddYears(3))
             return BadRequest(new { mensaje = "La fecha de inicio no es válida." });
 
-        if (decimal.Round(peticion.Precio, 2) != peticion.Precio)
-            return BadRequest(new { mensaje = "El precio admite máximo dos decimales." });
+        var (materiales, errorMateriales) = LeerMateriales(peticion.Precios);
+        if (errorMateriales is not null)
+            return BadRequest(new { mensaje = errorMateriales });
 
         // SEGURIDAD: el administrador debe existir, estar activo y ser de tipo Administrador.
         // Asi nadie con la llave puede atribuir los viajes a un empleado cualquiera.
-        var adminValido = await _db.Empleados.AsNoTracking().AnyAsync(e =>
-            e.IdEmpleado == peticion.IdAdministrador && e.Estado == "Activo" && e.Tipo == TiposEmpleado.AdministradorOperativo, ct);
-        if (!adminValido)
+        if (!await AdministradorValidoAsync(peticion.IdAdministrador, ct))
             return BadRequest(new { mensaje = "El administrador indicado no es válido." });
 
         var cotizacion = await _db.Cotizaciones.AsNoTracking().FirstOrDefaultAsync(c => c.IdCotizacion == id, ct);
@@ -104,18 +116,15 @@ public sealed class CotizacionViajesController : ControllerBase
 
         var fechas = CalcularFechas(peticion.FechaInicio.Date, peticion.Cantidad, frecuencia);
 
-        var estrategia = _db.Database.CreateExecutionStrategy();
+        var observacion = $"Cotización web #{id}: {fechas.Count} viaje(s), frecuencia {frecuencia.ToLowerInvariant()}.";
 
-        return await estrategia.ExecuteAsync<IActionResult>(async () =>
-        {
-            // SEGURIDAD: todo en una transaccion. Si algo falla a mitad, no quedan
-            // clientes, precios o viajes huerfanos a medio crear.
-            await using var transaccion = await _db.Database.BeginTransactionAsync(ct);
-
-            var cliente = await _db.Clientes.FirstOrDefaultAsync(c => c.Dui == solicitante.Dui, ct);
-            var clienteNuevo = cliente is null;
-            if (cliente is null)
+        return await CrearContratoAsync(
+            peticion.IdAdministrador,
+            async () =>
             {
+                var cliente = await _db.Clientes.FirstOrDefaultAsync(c => c.Dui == solicitante.Dui, ct);
+                if (cliente is not null)
+                    return (cliente, false);
                 cliente = new Cliente
                 {
                     Nombre = Recortar(solicitante.Nombre, 150),
@@ -126,25 +135,158 @@ public sealed class CotizacionViajesController : ControllerBase
                     IdAdministradorRegistro = peticion.IdAdministrador
                 };
                 _db.Clientes.Add(cliente);
-            }
+                return (cliente, true);
+            },
+            tipoServicio, lugar, textoRuta, materiales, fechas, frecuencia, id, observacion, ct);
+    }
 
-            var precio = await _db.PreciosLugar.FirstOrDefaultAsync(p => p.Tipo == tipoServicio && p.Lugar == lugar, ct);
-            var precioExistente = precio is not null;
-            if (precio is null)
+    public sealed class NuevoContratoPeticion
+    {
+        [Range(1, int.MaxValue)]
+        public int IdAdministrador { get; set; }
+
+        [Range(1, int.MaxValue)]
+        public int IdCliente { get; set; }
+
+        [Required]
+        [StringLength(60)]
+        public string TipoServicio { get; set; } = string.Empty;
+
+        [Range(1, MaxViajes)]
+        public int Cantidad { get; set; }
+
+        public DateTime FechaInicio { get; set; }
+
+        [Required]
+        [StringLength(20)]
+        public string Frecuencia { get; set; } = string.Empty;
+
+        [Required]
+        [MinLength(1)]
+        [MaxLength(20)]
+        public List<PrecioMaterial> Precios { get; set; } = new();
+
+        [Required]
+        [StringLength(120)]
+        public string Lugar { get; set; } = string.Empty;
+
+        [StringLength(70)]
+        public string? Destino { get; set; }
+
+        [StringLength(800)]
+        public string? Observacion { get; set; }
+    }
+
+    // POST /api/servicios-contrato/generar
+    // Contrato creado desde el escritorio para un cliente que no paso por la web.
+    [HttpPost("~/api/servicios-contrato/generar")]
+    public async Task<IActionResult> GenerarDirecto([FromBody] NuevoContratoPeticion peticion, CancellationToken ct)
+    {
+        var frecuencia = Frecuencias.FirstOrDefault(f => f.Equals(peticion.Frecuencia?.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (frecuencia is null)
+            return BadRequest(new { mensaje = $"La frecuencia debe ser una de: {string.Join(", ", Frecuencias)}." });
+
+        if (peticion.FechaInicio.Date < DateTime.Today.AddYears(-1) || peticion.FechaInicio.Date > DateTime.Today.AddYears(3))
+            return BadRequest(new { mensaje = "La fecha de inicio no es válida." });
+
+        var (materiales, errorMateriales) = LeerMateriales(peticion.Precios);
+        if (errorMateriales is not null)
+            return BadRequest(new { mensaje = errorMateriales });
+
+        if (!await AdministradorValidoAsync(peticion.IdAdministrador, ct))
+            return BadRequest(new { mensaje = "El administrador indicado no es válido." });
+
+        var tipoServicio = InputSanitizer.Limpiar(peticion.TipoServicio, 60);
+        var lugar = InputSanitizer.Limpiar(peticion.Lugar, 120);
+        if (string.IsNullOrWhiteSpace(tipoServicio) || string.IsNullOrWhiteSpace(lugar))
+            return BadRequest(new { mensaje = "El tipo de servicio y el lugar de recolección son obligatorios." });
+
+        var destino = InputSanitizer.Limpiar(peticion.Destino, 70);
+        var textoRuta = string.IsNullOrWhiteSpace(destino) || destino.Equals(lugar, StringComparison.OrdinalIgnoreCase)
+            ? lugar
+            : $"{lugar} → {destino}";
+
+        var fechas = CalcularFechas(peticion.FechaInicio.Date, peticion.Cantidad, frecuencia);
+        var detalle = InputSanitizer.Limpiar(peticion.Observacion, 800);
+        var observacion = $"Contrato directo: {fechas.Count} viaje(s), frecuencia {frecuencia.ToLowerInvariant()}."
+            + (string.IsNullOrWhiteSpace(detalle) ? string.Empty : $" {detalle}");
+
+        return await CrearContratoAsync(
+            peticion.IdAdministrador,
+            async () =>
             {
-                precio = new PrecioLugar
+                var cliente = await _db.Clientes.FirstOrDefaultAsync(c => c.IdCliente == peticion.IdCliente, ct);
+                return (cliente, false);
+            },
+            tipoServicio, lugar, textoRuta, materiales, fechas, frecuencia, null, observacion, ct);
+    }
+
+    private async Task<bool> AdministradorValidoAsync(int idAdministrador, CancellationToken ct) =>
+        await _db.Empleados.AsNoTracking().AnyAsync(e =>
+            e.IdEmpleado == idAdministrador && e.Estado == "Activo" && e.Tipo == TiposEmpleado.AdministradorOperativo, ct);
+
+    private static (List<(string Tipo, decimal Precio)> Materiales, string? Error) LeerMateriales(List<PrecioMaterial> precios)
+    {
+        var materiales = new List<(string Tipo, decimal Precio)>();
+        foreach (var item in precios)
+        {
+            var tipo = InputSanitizer.Limpiar(item.Tipo, 60);
+            if (string.IsNullOrWhiteSpace(tipo))
+                return (materiales, "Cada material debe tener nombre.");
+            if (decimal.Round(item.Precio, 2) != item.Precio)
+                return (materiales, "El precio admite máximo dos decimales.");
+            if (materiales.Any(m => m.Tipo.Equals(tipo, StringComparison.OrdinalIgnoreCase)))
+                return (materiales, $"El material {tipo} está repetido.");
+            materiales.Add((tipo, item.Precio));
+        }
+        return (materiales, null);
+    }
+
+    private async Task<IActionResult> CrearContratoAsync(
+        int idAdministrador,
+        Func<Task<(Cliente? Cliente, bool Nuevo)>> obtenerCliente,
+        string tipoServicio,
+        string lugar,
+        string textoRuta,
+        List<(string Tipo, decimal Precio)> materiales,
+        List<DateTime> fechas,
+        string frecuencia,
+        int? idCotizacion,
+        string observacion,
+        CancellationToken ct)
+    {
+        var estrategia = _db.Database.CreateExecutionStrategy();
+
+        return await estrategia.ExecuteAsync<IActionResult>(async () =>
+        {
+            // SEGURIDAD: todo en una transaccion. Si algo falla a mitad, no quedan
+            // clientes, precios o viajes huerfanos a medio crear.
+            await using var transaccion = await _db.Database.BeginTransactionAsync(ct);
+
+            var (cliente, clienteNuevo) = await obtenerCliente();
+            if (cliente is null)
+                return NotFound(new { mensaje = "El cliente no existe." });
+
+            var precios = new List<PrecioLugar>();
+            foreach (var (tipo, valor) in materiales)
+            {
+                var precio = await _db.PreciosLugar.FirstOrDefaultAsync(p => p.Tipo == tipo && p.Lugar == lugar, ct);
+                if (precio is null)
                 {
-                    Tipo = tipoServicio,
-                    Lugar = lugar,
-                    Precio = peticion.Precio,
-                    FechaModificacion = DateTime.Today
-                };
-                _db.PreciosLugar.Add(precio);
+                    precio = new PrecioLugar { Tipo = tipo, Lugar = lugar };
+                    _db.PreciosLugar.Add(precio);
+                }
+                if (precio.Precio != valor || precio.FechaModificacion is null)
+                {
+                    precio.Precio = valor;
+                    precio.FechaModificacion = DateTime.Today;
+                }
+                precios.Add(precio);
             }
 
             var viajes = fechas.Select((fecha, i) => new RutaTrabajo
             {
-                IdAdministrador = peticion.IdAdministrador,
+                IdAdministrador = idAdministrador,
                 Destino = Recortar($"[{fecha:yyyy-MM-dd}] {textoRuta}", 200),
                 Tipo = Recortar($"{tipoServicio} {i + 1}/{fechas.Count}", 60)
             }).ToList();
@@ -156,11 +298,11 @@ public sealed class CotizacionViajesController : ControllerBase
             {
                 IdRutaTrabajo = viajes[0].IdRutaTrabajo,
                 IdCliente = cliente.IdCliente,
-                IdPrecioLugar = precio.IdPrecioLugar,
+                IdPrecioLugar = precios[0].IdPrecioLugar,
                 Fecha = fechas[0],
                 TipoTransportaje = Recortar(tipoServicio, 80),
-                IdCotizacion = id,
-                Observacion = $"Cotización web #{id}: {fechas.Count} viaje(s), frecuencia {frecuencia.ToLowerInvariant()}."
+                IdCotizacion = idCotizacion,
+                Observacion = Recortar($"{observacion} Materiales: {string.Join(", ", precios.Select(p => p.Tipo))}.", 1000)
             };
             _db.ServiciosContrato.Add(contrato);
             await _db.SaveChangesAsync(ct);
@@ -172,9 +314,9 @@ public sealed class CotizacionViajesController : ControllerBase
 
             var resumen = new
             {
-                idCotizacion = id,
+                idCotizacion,
                 cliente.IdCliente,
-                precio.IdPrecioLugar,
+                precios = precios.Select(p => new { p.IdPrecioLugar, p.Tipo, p.Precio }).ToList(),
                 viajes = viajes.Select(v => v.IdRutaTrabajo).ToList(),
                 frecuencia,
                 fechaInicio = fechas[0].ToString("yyyy-MM-dd"),
@@ -183,29 +325,29 @@ public sealed class CotizacionViajesController : ControllerBase
             // SEGURIDAD: la generacion queda en la auditoria con el administrador que la hizo.
             _db.Auditorias.Add(new Auditoria
             {
-                IdEmpleado = peticion.IdAdministrador,
+                IdEmpleado = idAdministrador,
                 TablaAfectada = "ruta_trabajo",
-                IdRegistro = $"cotizacion-{id}",
+                IdRegistro = idCotizacion is null ? $"contrato-{contrato.IdServicioContrato}" : $"cotizacion-{idCotizacion}",
                 Accion = "INSERT",
                 FechaHora = DateTime.Now,
                 ValorNuevo = JsonSerializer.Serialize(resumen),
-                Detalle = $"SACOR Desktop: {fechas.Count} viaje(s) generados desde la cotización #{id}"
+                Detalle = idCotizacion is null
+                    ? $"SACOR Desktop: contrato #{contrato.IdServicioContrato} con {fechas.Count} viaje(s)"
+                    : $"SACOR Desktop: {fechas.Count} viaje(s) generados desde la cotización #{idCotizacion}"
             });
 
             await _db.SaveChangesAsync(ct);
             await transaccion.CommitAsync(ct);
 
-            _logger.LogInformation("Cotizacion {Id}: {Cantidad} viajes generados por el empleado {Admin}",
-                id, fechas.Count, peticion.IdAdministrador);
+            _logger.LogInformation("Contrato {Contrato}: {Cantidad} viajes generados por el empleado {Admin}",
+                contrato.IdServicioContrato, fechas.Count, idAdministrador);
 
             return Ok(new
             {
-                idCotizacion = id,
+                idCotizacion,
                 idCliente = cliente.IdCliente,
                 clienteNuevo,
-                idPrecioLugar = precio.IdPrecioLugar,
-                precioExistente,
-                precioUsado = precio.Precio,
+                precios = precios.Select(p => new { p.IdPrecioLugar, p.Tipo, p.Precio }),
                 idServicioContrato = contrato.IdServicioContrato,
                 viajes = viajes.Select(v => new { v.IdRutaTrabajo, v.Destino, v.Tipo }),
                 mensaje = $"Se generaron {fechas.Count} viaje(s)."
