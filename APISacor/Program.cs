@@ -70,6 +70,11 @@ builder.Services.AddDbContext<SacorDbContext>(opciones =>
 
 builder.Services.AddScoped<ServicioAccesoMovil>();
 
+var opcionesTwilio = builder.Configuration.GetSection(APISacor.Controllers.OpcionesTwilio.Seccion).Get<APISacor.Controllers.OpcionesTwilio>()
+    ?? new APISacor.Controllers.OpcionesTwilio();
+builder.Services.AddSingleton(opcionesTwilio);
+builder.Services.AddScoped<ChatbotCotizacion>();
+
 // ---------------------------------------------------------------------------
 // SEGURIDAD: lectura de las API Keys desde configuracion, nunca del codigo.
 // ---------------------------------------------------------------------------

@@ -32,6 +32,7 @@ public class SacorDbContext : DbContext
     public DbSet<Auditoria> Auditorias => Set<Auditoria>();
     public DbSet<EvidenciaFoto> EvidenciasFoto => Set<EvidenciaFoto>();
     public DbSet<GastoViaje> GastosViaje => Set<GastoViaje>();
+    public DbSet<ConversacionWhatsApp> ConversacionesWhatsApp => Set<ConversacionWhatsApp>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -58,6 +59,10 @@ public class SacorDbContext : DbContext
         modelBuilder.Entity<EvidenciaFoto>()
             .HasOne<Limpieza>().WithMany().HasForeignKey(f => f.IdLimpieza)
             .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ConversacionWhatsApp>()
+            .HasIndex(c => c.Telefono).IsUnique();
+        modelBuilder.Entity<ConversacionWhatsApp>()
+            .HasOne<Cotizacion>().WithMany().HasForeignKey(c => c.IdCotizacion);
         modelBuilder.Entity<EvidenciaFoto>()
             .HasIndex(f => f.IdLimpieza)
             .HasDatabaseName("IX_evidencia_foto_limpieza");

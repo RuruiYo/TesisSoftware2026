@@ -428,3 +428,32 @@ Un contrato (`servicio_contrato`) tiene varios viajes (`ruta_trabajo.id_servicio
 | `GET /api/movil/tecnico/registros` | Técnico | Historial por viaje: cargas con su cobro, gastos y observaciones |
 
 Solo se puede registrar algo en un viaje al que el empleado está asignado. Los gastos de `gasto_viaje` (también el gasto de la información adicional del motorista) suman en la app de escritorio como "Gastos de viajes"; el CRUD es `/api/gastos-viaje`.
+
+## 10. Chatbot de WhatsApp
+
+El chatbot permite que un cliente escriba al WhatsApp de SACOR y haga su solicitud de cotización paso a paso. Al confirmar, la cotización queda guardada en la tabla `cotizacion` con estado `Pendiente` y aparece en **Solicitudes web** de la app de escritorio, con el detalle `Origen: WhatsApp`.
+
+- Proveedor: Twilio (WhatsApp Sandbox en pruebas).
+- Webhook: `POST /api/whatsapp/webhook` (ruta pública protegida con la firma `X-Twilio-Signature`). La respuesta se devuelve en TwiML.
+- El estado de cada conversación se guarda en la tabla `conversacion_whatsapp`.
+- Comandos: `cancelar` reinicia la conversación; la opción 2 del menú deja el chat a un asesor humano y el bot calla hasta que el cliente escriba `menu` o pasen 12 horas.
+
+### 10.1 Configuración
+
+1. Crear una cuenta en twilio.com y abrir **Messaging › Try it out › Send a WhatsApp message**.
+2. Desde el celular, enviar al número del sandbox el mensaje `join <palabra-clave>` que muestra Twilio.
+3. Abrir un túnel público hacia la API:
+
+```powershell
+cloudflared tunnel --url http://localhost:5084
+```
+
+4. En **Sandbox settings**, en **When a message comes in**, poner `https://DIRECCION-DEL-TUNEL/api/whatsapp/webhook` con método `POST`.
+5. Guardar el Auth Token (Console › Account info) y la misma URL del webhook con user-secrets:
+
+```powershell
+dotnet user-secrets set "Twilio:AuthToken" "AUTH_TOKEN"
+dotnet user-secrets set "Twilio:UrlWebhook" "https://DIRECCION-DEL-TUNEL/api/whatsapp/webhook"
+```
+
+La URL guardada debe ser idéntica a la configurada en Twilio, porque forma parte de la firma. Si el túnel cambia de dirección, actualizar ambas.

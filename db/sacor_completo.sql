@@ -9,6 +9,7 @@ IF OBJECT_ID('dbo.FK_ruta_cotizacion', 'F') IS NOT NULL ALTER TABLE dbo.ruta_tra
 IF OBJECT_ID('dbo.FK_ruta_contrato', 'F') IS NOT NULL ALTER TABLE dbo.ruta_trabajo DROP CONSTRAINT FK_ruta_contrato;
 IF OBJECT_ID('dbo.FK_ruta_camion', 'F') IS NOT NULL ALTER TABLE dbo.ruta_trabajo DROP CONSTRAINT FK_ruta_camion;
 IF OBJECT_ID('dbo.FK_contrato_cotizacion', 'F') IS NOT NULL ALTER TABLE dbo.servicio_contrato DROP CONSTRAINT FK_contrato_cotizacion;
+IF OBJECT_ID('dbo.conversacion_whatsapp', 'U') IS NOT NULL DROP TABLE dbo.conversacion_whatsapp;
 IF OBJECT_ID('dbo.gasto_viaje', 'U') IS NOT NULL DROP TABLE dbo.gasto_viaje;
 IF OBJECT_ID('dbo.evidencia_foto', 'U') IS NOT NULL DROP TABLE dbo.evidencia_foto;
 IF OBJECT_ID('dbo.sesion_movil', 'U') IS NOT NULL DROP TABLE dbo.sesion_movil;
@@ -431,6 +432,20 @@ CREATE TABLE gasto_viaje (
 GO
 
 CREATE INDEX IX_gasto_viaje_ruta ON gasto_viaje (id_ruta_trabajo);
+GO
+
+CREATE TABLE conversacion_whatsapp (
+    id_conversacion INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    telefono NVARCHAR(20) NOT NULL,
+    paso NVARCHAR(30) NOT NULL,
+    datos NVARCHAR(2000) NULL,
+    ultimo_mensaje_id NVARCHAR(128) NULL,
+    actualizado_utc DATETIME2 NOT NULL,
+    id_cotizacion INT NULL,
+    CONSTRAINT UQ_conversacion_whatsapp_telefono UNIQUE (telefono),
+    CONSTRAINT FK_conversacion_whatsapp_cotizacion FOREIGN KEY (id_cotizacion)
+        REFERENCES cotizacion(id_cotizacion)
+);
 GO
 
 CREATE INDEX IX_pesaje_ruta ON pesaje (id_ruta_trabajo);
