@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using APISacor.Data;
 using APISacor.Models;
 using APISacor.Security;
@@ -19,6 +20,15 @@ public sealed class ChatbotCotizacion
     private static readonly TimeSpan PausaAsesor = TimeSpan.FromHours(12);
 
     private const string Omitir = "Escribe *omitir* si no aplica.";
+
+    private static readonly string[] OpcionesMenu = { "Solicitar una cotización", "Hablar con un asesor" };
+    private static readonly string[][] ClavesMenu = { new[] { "cotiz", "solicit", "precio", "presupuesto" }, new[] { "asesor", "persona", "humano", "agente", "hablar" } };
+    private static readonly string[][] ClavesServicio = { new[] { "acarre", "traslado", "transporte" }, new[] { "recolec", "desecho", "basura", "residuo" }, new[] { "recicl" }, new[] { "especific", "otro" } };
+    private static readonly string[] OpcionesModalidad = { "Servicio puntual", "Contrato recurrente" };
+    private static readonly string[][] ClavesModalidad = { new[] { "puntual", "una vez", "unica", "solo una" }, new[] { "contrato", "recurrente", "periodic", "varias veces" } };
+    private static readonly string[][] ClavesFrecuencia = { new[] { "diari", "todos los dias" }, new[] { "semanal", "cada semana" }, new[] { "quincenal", "cada quince", "cada 15" }, new[] { "mensual", "cada mes" }, new[] { "demanda", "cuando" } };
+    private static readonly string[] OpcionesConfirmar = { "Sí, enviar solicitud", "No, cancelar" };
+    private static readonly string[][] ClavesConfirmar = { new[] { "si", "enviar", "correcto", "ok", "confirm", "dale" }, new[] { "no" } };
 
     private readonly SacorDbContext _db;
     private readonly ILogger<ChatbotCotizacion> _logger;
@@ -88,14 +98,15 @@ public sealed class ChatbotCotizacion
                 return new() { "Hola, soy el asistente virtual de *SACOR, Soluciones Ambientales Corporativas*.\n\n" + Menu() };
 
             case "menu":
-                if (comando == "1")
+                var opcionMenu = Elegir(texto, OpcionesMenu, ClavesMenu);
+                if (opcionMenu == 0)
                     return Avanzar(c, datos, "nombre", "Perfecto, vamos a armar tu solicitud de cotización. Puedes escribir *cancelar* en cualquier momento.\n\n¿Cuál es tu *nombre completo* o el nombre de tu empresa o institución?");
-                if (comando == "2")
+                if (opcionMenu == 1)
                 {
                     c.Paso = "asesor";
                     return new() { "Un asesor de SACOR te responderá en este chat en horario de oficina, de lunes a viernes de 8:00 a 17:00.\n\nSi luego quieres usar el asistente, escribe *menu*." };
                 }
-                return new() { "Responde con el número de una opción.\n\n" + Menu() };
+                return new() { "No entendí tu respuesta. Escribe el número o el nombre de una opción.\n\n" + Menu() };
 
             case "nombre":
                 if (texto.Length < 3 || texto.Length > 150)
@@ -120,16 +131,17 @@ public sealed class ChatbotCotizacion
                 return Avanzar(c, datos, "servicio", "¿Qué *tipo de servicio* necesitas?\n\n" + Lista(ServiciosVisibles));
 
             case "servicio":
-                var servicio = Opcion(comando, Servicios);
-                if (servicio is null)
-                    return new() { "Responde con el número del servicio.\n\n" + Lista(ServiciosVisibles) };
-                datos["servicio"] = servicio;
+                var indiceServicio = Elegir(texto, ServiciosVisibles, ClavesServicio);
+                if (indiceServicio < 0)
+                    return new() { "No entendí el servicio. Escribe el número o el nombre.\n\n" + Lista(ServiciosVisibles) };
+                datos["servicio"] = Servicios[indiceServicio];
                 return Avanzar(c, datos, "modalidad", "¿Qué *modalidad* buscas?\n\n1. Servicio puntual (una sola vez)\n2. Contrato recurrente");
 
             case "modalidad":
-                if (comando is not ("1" or "2"))
-                    return new() { "Responde *1* para servicio puntual o *2* para contrato recurrente." };
-                datos["modalidad"] = comando == "1" ? "puntual" : "recurrente";
+                var indiceModalidad = Elegir(texto, OpcionesModalidad, ClavesModalidad);
+                if (indiceModalidad < 0)
+                    return new() { "Responde *1* o *puntual* para un servicio de una sola vez, o *2* o *contrato* para un contrato recurrente." };
+                datos["modalidad"] = indiceModalidad == 0 ? "puntual" : "recurrente";
                 return Avanzar(c, datos, "lugar", "¿Cuál es el *lugar de recolección*? Escribe la dirección o el municipio.");
 
             case "lugar":
@@ -151,11 +163,12 @@ public sealed class ChatbotCotizacion
                 {
                     var lista = (datos.GetValueOrDefault("lista_materiales") ?? string.Empty).Split('|', StringSplitOptions.RemoveEmptyEntries);
                     var elegidos = new List<string>();
-                    foreach (var parte in comando.Split(new[] { ',', ' ', 'y' }, StringSplitOptions.RemoveEmptyEntries))
+                    foreach (var parte in PartesLista(texto))
                     {
-                        if (!int.TryParse(parte, out var n) || n < 1 || n > lista.Length)
-                            return new() { "Responde con los números de los materiales separados por coma, por ejemplo *1,3*. " + Omitir };
-                        if (!elegidos.Contains(lista[n - 1])) elegidos.Add(lista[n - 1]);
+                        var indice = ElegirMaterial(parte, lista);
+                        if (indice < 0)
+                            return new() { $"No reconocí \"{parte}\". Escribe los números o los nombres de los materiales separados por coma, por ejemplo *1,3* o *ripio, tierra*. " + Omitir };
+                        if (!elegidos.Contains(lista[indice])) elegidos.Add(lista[indice]);
                     }
                     if (elegidos.Count > 0) datos["materiales"] = string.Join(", ", elegidos);
                 }
@@ -168,10 +181,10 @@ public sealed class ChatbotCotizacion
                 return Avanzar(c, datos, "frecuencia", "¿Con qué *frecuencia* necesitas los viajes?\n\n" + Lista(Frecuencias));
 
             case "frecuencia":
-                var frecuencia = Opcion(comando, Frecuencias);
-                if (frecuencia is null)
-                    return new() { "Responde con el número de la frecuencia.\n\n" + Lista(Frecuencias) };
-                datos["frecuencia"] = frecuencia;
+                var indiceFrecuencia = Elegir(texto, Frecuencias, ClavesFrecuencia);
+                if (indiceFrecuencia < 0)
+                    return new() { "No entendí la frecuencia. Escribe el número o el nombre.\n\n" + Lista(Frecuencias) };
+                datos["frecuencia"] = Frecuencias[indiceFrecuencia];
                 return Avanzar(c, datos, "fecha", "¿Desde qué *fecha* quieres iniciar? Escríbela como dd/mm/aaaa. " + Omitir);
 
             case "fecha":
@@ -207,13 +220,14 @@ public sealed class ChatbotCotizacion
                 return Avanzar(c, datos, "confirmar", Resumen(datos) + "\n\n¿Los datos son correctos?\n1. Sí, enviar solicitud\n2. No, cancelar");
 
             case "confirmar":
-                if (comando == "2")
+                var confirmacion = Elegir(texto, OpcionesConfirmar, ClavesConfirmar);
+                if (confirmacion == 1)
                 {
                     Reiniciar(c);
                     return new() { "Listo, no enviamos nada. Escribe cualquier mensaje cuando quieras empezar de nuevo." };
                 }
-                if (comando != "1")
-                    return new() { "Responde *1* para enviar la solicitud o *2* para cancelar." };
+                if (confirmacion != 0)
+                    return new() { "Responde *1* o *sí* para enviar la solicitud, o *2* o *no* para cancelar." };
                 var id = await GuardarAsync(c.Telefono, datos, ct);
                 Reiniciar(c);
                 c.IdCotizacion = id;
@@ -237,7 +251,7 @@ public sealed class ChatbotCotizacion
         if (tipos.Count == 0)
             return PreguntarFechas(c, datos);
         datos["lista_materiales"] = string.Join('|', tipos);
-        return Avanzar(c, datos, "materiales", "¿Qué *tipos de material* se moverán? Responde con los números separados por coma, por ejemplo 1,3.\n\n" + Lista(tipos) + "\n\n" + Omitir);
+        return Avanzar(c, datos, "materiales", "¿Qué *tipos de material* se moverán? Responde con los números o los nombres separados por coma, por ejemplo 1,3.\n\n" + Lista(tipos) + "\n\n" + Omitir);
     }
 
     private static List<string> PreguntarFechas(ConversacionWhatsApp c, Dictionary<string, string> datos)
@@ -347,7 +361,7 @@ public sealed class ChatbotCotizacion
     }
 
     private static string Menu() =>
-        "¿En qué te puedo ayudar? Responde con el número de una opción:\n\n1. Solicitar una cotización\n2. Hablar con un asesor";
+        "¿En qué te puedo ayudar? Responde con el número o el nombre de una opción:\n\n1. Solicitar una cotización\n2. Hablar con un asesor";
 
     private static string PreguntaDescripcion() =>
         "Por último, ¿quieres agregar algún *detalle*? Por ejemplo horarios de acceso o si se necesita carga y descarga. " + Omitir;
@@ -387,8 +401,52 @@ public sealed class ChatbotCotizacion
     private static string Lista(IEnumerable<string> opciones) =>
         string.Join("\n", opciones.Select((o, i) => $"{i + 1}. {o}"));
 
-    private static string? Opcion(string comando, string[] opciones) =>
-        int.TryParse(comando, out var n) && n >= 1 && n <= opciones.Length ? opciones[n - 1] : null;
+    private static int Elegir(string texto, IReadOnlyList<string> opciones, string[][] claves)
+    {
+        var t = SinAcentos(texto).Trim('.', '!', '*', ',', ' ');
+        if (int.TryParse(t, out var n))
+            return n >= 1 && n <= opciones.Count ? n - 1 : -1;
+        if (t.Length < 2)
+            return -1;
+
+        var coincidencias = new List<int>();
+        for (var i = 0; i < opciones.Count; i++)
+        {
+            var opcion = SinAcentos(opciones[i]);
+            var porClave = i < claves.Length && claves[i].Any(k => Regex.IsMatch(t, $@"\b{Regex.Escape(k)}", RegexOptions.None, TimeSpan.FromMilliseconds(50)));
+            if (t == opcion || (t.Length >= 4 && opcion.Contains(t)) || t.Contains(opcion) || porClave)
+                coincidencias.Add(i);
+        }
+        return coincidencias.Count == 1 ? coincidencias[0] : -1;
+    }
+
+    private static int ElegirMaterial(string parte, string[] lista)
+    {
+        var t = SinAcentos(parte);
+        if (int.TryParse(t, out var n))
+            return n >= 1 && n <= lista.Length ? n - 1 : -1;
+        if (t.Length < 3)
+            return -1;
+        var coincidencias = Enumerable.Range(0, lista.Length)
+            .Where(i => SinAcentos(lista[i]) == t || SinAcentos(lista[i]).Contains(t) || t.Contains(SinAcentos(lista[i])))
+            .ToList();
+        return coincidencias.Count == 1 ? coincidencias[0] : -1;
+    }
+
+    private static IEnumerable<string> PartesLista(string texto) =>
+        Regex.Split(texto.Trim(), @"\s*(?:,|;|\s+y\s+|\s+e\s+)\s*|\s+(?=\d)", RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(50))
+            .Select(p => p.Trim('.', '*', ' '))
+            .Where(p => p.Length > 0);
+
+    private static string SinAcentos(string texto)
+    {
+        var descompuesto = texto.Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder(descompuesto.Length);
+        foreach (var ch in descompuesto)
+            if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
+                sb.Append(ch);
+        return sb.ToString().Normalize(NormalizationForm.FormC).ToLowerInvariant().Trim();
+    }
 
     private static string Limpiar(string texto)
     {
