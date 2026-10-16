@@ -223,6 +223,10 @@ public sealed class TransportistaController : ControllerBase
         if (!await ConsultasMovil.EstaAsignadoAsync(_db, peticion.IdRutaTrabajo, empleado.IdEmpleado, ct))
             return NotFound(new { mensaje = "No estás asignado a ese viaje." });
 
+        var errorHoy = await ConsultasMovil.ValidarRegistroDeHoyAsync(_db, peticion.IdRutaTrabajo, empleado.IdEmpleado, ct);
+        if (errorHoy is not null)
+            return BadRequest(new { mensaje = errorHoy });
+
         var limpieza = new Limpieza
         {
             // SEGURIDAD: el autor sale de la sesion, nunca de un id enviado por el celular.
@@ -338,6 +342,10 @@ public sealed class TransportistaController : ControllerBase
 
         if (!await ConsultasMovil.EstaAsignadoAsync(_db, peticion.IdRutaTrabajo, empleado.IdEmpleado, ct))
             return NotFound(new { mensaje = "No estás asignado a ese viaje." });
+
+        var errorHoy = await ConsultasMovil.ValidarRegistroDeHoyAsync(_db, peticion.IdRutaTrabajo, empleado.IdEmpleado, ct);
+        if (errorHoy is not null)
+            return BadRequest(new { mensaje = errorHoy });
 
         var km = peticion.Kilometros.ToString("0.##", CultureInfo.InvariantCulture);
         var litros = peticion.CombustibleLitros.ToString("0.##", CultureInfo.InvariantCulture);

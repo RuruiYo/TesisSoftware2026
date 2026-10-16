@@ -34,6 +34,28 @@ public static class ConsultasMovil
 
     public static DateTime HoyLocal() => DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-6)).Date;
 
+    public static Task<bool> EnJornadaAsync(SacorDbContext db, int idEmpleado, CancellationToken ct)
+    {
+        var hoy = HoyLocal();
+        return db.HorariosTrabajo.AsNoTracking()
+            .AnyAsync(h => h.IdEmpleadoMarco == idEmpleado && h.Fecha == hoy && h.Salida == null, ct);
+    }
+
+    public static async Task<string?> ValidarRegistroDeHoyAsync(SacorDbContext db, int idRutaTrabajo, int idEmpleado, CancellationToken ct)
+    {
+        var destino = await db.RutasTrabajo.AsNoTracking()
+            .Where(r => r.IdRutaTrabajo == idRutaTrabajo)
+            .Select(r => r.Destino)
+            .FirstOrDefaultAsync(ct);
+        if (destino is null)
+            return "El viaje no existe.";
+        if (LeerDestino(destino).Fecha != HoyLocal())
+            return "Solo puedes registrar evidencias de los viajes de hoy.";
+        if (!await EnJornadaAsync(db, idEmpleado, ct))
+            return "Marca tu entrada antes de registrar evidencias.";
+        return null;
+    }
+
     // SEGURIDAD: un empleado solo puede registrar algo en un viaje al que esta asignado.
     public static Task<bool> EstaAsignadoAsync(SacorDbContext db, int idRutaTrabajo, int idEmpleado, CancellationToken ct) =>
         db.RutasEmpleado.AsNoTracking().AnyAsync(a => a.IdRutaTrabajo == idRutaTrabajo && a.IdEmpleado == idEmpleado, ct);

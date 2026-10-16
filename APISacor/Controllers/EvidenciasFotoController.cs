@@ -49,6 +49,11 @@ public sealed class EvidenciasFotoController : ControllerBase
         if (evidencia is null)
             return NotFound(new { mensaje = "La evidencia no existe o no te pertenece." });
 
+        if (evidencia.Fecha.Date != ConsultasMovil.HoyLocal())
+            return BadRequest(new { mensaje = "Solo puedes agregar fotos a evidencias de hoy." });
+        if (!await ConsultasMovil.EnJornadaAsync(_db, empleado.IdEmpleado, ct))
+            return BadRequest(new { mensaje = "Marca tu entrada antes de subir fotos." });
+
         var cantidad = await _db.EvidenciasFoto.CountAsync(f => f.IdLimpieza == idLimpieza, ct);
         if (cantidad >= ValidadorFoto.MaxFotosPorEvidencia)
             return Conflict(new { mensaje = $"Cada evidencia admite máximo {ValidadorFoto.MaxFotosPorEvidencia} fotos." });

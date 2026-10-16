@@ -237,8 +237,8 @@ public sealed class TecnicoController : ControllerBase
     }
 
     // POST: api/movil/tecnico/recoleccion
-    // Registra en un solo paso lo ocurrido en el viaje: observacion (con fotos aparte),
-    // toneladas movidas por material (pesaje) y gastos del viaje.
+    // Registra en un solo paso lo ocurrido en el viaje de hoy: observacion (con fotos aparte),
+    // toneladas movidas por material (pesaje) y gastos del viaje. Exige jornada abierta.
     [HttpPost("recoleccion")]
     public async Task<IActionResult> RegistrarRecoleccion(
         [FromBody] PeticionRecoleccion peticion,
@@ -253,6 +253,10 @@ public sealed class TecnicoController : ControllerBase
         // SEGURIDAD: el tecnico solo registra en viajes a los que esta asignado.
         if (!await ConsultasMovil.EstaAsignadoAsync(_db, peticion.IdRutaTrabajo, empleado.IdEmpleado, ct))
             return BadRequest(new { mensaje = "No estás asignado a ese viaje." });
+
+        var errorHoy = await ConsultasMovil.ValidarRegistroDeHoyAsync(_db, peticion.IdRutaTrabajo, empleado.IdEmpleado, ct);
+        if (errorHoy is not null)
+            return BadRequest(new { mensaje = errorHoy });
 
         var observacion = peticion.Observacion?.Trim();
         if (string.IsNullOrWhiteSpace(observacion) && peticion.Cargas.Count == 0 && peticion.Gastos.Count == 0)
@@ -286,14 +290,12 @@ public sealed class TecnicoController : ControllerBase
             gastos.Add((concepto, gasto.Monto, descripcion));
         }
 
-        // La fecha contable es la del viaje si ya ocurrio; si no, la de hoy.
         var hoy = ConsultasMovil.HoyLocal();
         var destino = await _db.RutasTrabajo.AsNoTracking()
             .Where(r => r.IdRutaTrabajo == peticion.IdRutaTrabajo)
             .Select(r => r.Destino)
             .FirstAsync(ct);
-        var fechaViaje = ConsultasMovil.LeerDestino(destino).Fecha;
-        var fecha = fechaViaje is not null && fechaViaje <= hoy ? fechaViaje.Value : hoy;
+        var fecha = ConsultasMovil.LeerDestino(destino).Fecha ?? hoy;
 
         var estrategia = _db.Database.CreateExecutionStrategy();
         return await estrategia.ExecuteAsync<IActionResult>(async () =>
