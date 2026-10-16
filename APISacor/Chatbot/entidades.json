@@ -1,0 +1,48 @@
+{
+  "servicio": {
+    "Acarreo de materiales": [
+      "acarreo", "acarreos", "acarrear", "traslado", "traslados", "trasladar", "transporte", "transportar",
+      "llevar", "mover", "flete", "mudanza", "acarreo de materiales"
+    ],
+    "Recoleccion de desechos": [
+      "recoleccion", "recolectar", "recoger", "recogida", "basura", "desechos", "desecho", "residuos",
+      "desperdicios", "botar", "tirar", "sacar basura", "recoleccion de desechos"
+    ],
+    "Reciclaje": [
+      "reciclaje", "reciclar", "reciclable", "reciclables", "reciclado"
+    ],
+    "Especifico": [
+      "especifico", "servicio especial", "otro servicio", "algo diferente", "a la medida"
+    ]
+  },
+  "modalidad": {
+    "puntual": [
+      "una vez", "una sola vez", "solo una vez", "puntual", "unico", "unica", "por unica vez", "un solo viaje",
+      "un viaje", "solo un viaje", "solo por hoy"
+    ],
+    "recurrente": [
+      "contrato", "recurrente", "periodico", "periodica", "varias veces", "varios meses", "todo el ano",
+      "constante", "fijo", "permanente"
+    ]
+  },
+  "frecuencia": {
+    "Diaria": ["diario", "diaria", "diariamente", "todos los dias", "cada dia", "a diario"],
+    "Semanal": ["semanal", "semanalmente", "cada semana", "una vez por semana", "una vez a la semana", "por semana"],
+    "Quincenal": ["quincenal", "quincenalmente", "cada quince dias", "cada 15 dias", "cada dos semanas", "cada quincena"],
+    "Mensual": ["mensual", "mensualmente", "cada mes", "una vez al mes", "una vez por mes", "al mes"],
+    "A demanda": ["a demanda", "cuando lo necesite", "cuando se necesite", "cuando lo necesitemos", "por pedido", "segun se necesite"]
+  },
+  "municipios": [
+    "San Salvador", "Soyapango", "Mejicanos", "Apopa", "Ilopango", "San Marcos", "Ciudad Delgado", "Delgado",
+    "Cuscatancingo", "Ayutuxtepeque", "Tonacatepeque", "Nejapa", "Aguilares", "Guazapa", "Panchimalco",
+    "Rosario de Mora", "Santo Tomas", "Santiago Texacuangos", "San Martin", "Antiguo Cuscatlan", "Santa Tecla",
+    "Nuevo Cuscatlan", "Colon", "Lourdes", "Zaragoza", "La Libertad", "Puerto de La Libertad", "San Juan Opico",
+    "Opico", "Quezaltepeque", "Ciudad Arce", "Santa Ana", "Chalchuapa", "Metapan", "Sonsonate", "Acajutla",
+    "Izalco", "Nahuizalco", "Armenia", "Ahuachapan", "Atiquizaya", "San Miguel", "Usulutan",
+    "Santiago de Maria", "Jiquilisco", "La Union", "San Vicente", "Zacatecoluca", "Cojutepeque", "Suchitoto",
+    "Chalatenango", "Sensuntepeque", "Ilobasco", "San Francisco Gotera", "Olocuilta", "San Luis Talpa",
+    "Comalapa", "El Congo", "Coatepeque", "Ciudad Barrios", "Santa Rosa de Lima", "Santa Elena", "El Paisnal",
+    "San Jose Villanueva", "Huizucar", "Tamanique", "Chiltiupan", "Jayaque", "Sacacoyo", "Tepecoyo",
+    "Talnique", "Comasagua", "San Pablo Tacachico", "San Matias", "Nueva San Salvador", "Las Delicias"
+  ]
+}

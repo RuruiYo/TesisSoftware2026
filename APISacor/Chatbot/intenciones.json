@@ -1,0 +1,156 @@
+{
+  "umbralConfianza": 0.5,
+  "intenciones": [
+    {
+      "nombre": "saludo",
+      "ejemplos": [
+        "hola", "hola buenas", "buenos dias", "buenas tardes", "buenas noches", "que tal", "hey", "saludos",
+        "hola buen dia", "buenas", "hola como estas", "holi", "buen dia"
+      ],
+      "respuestas": []
+    },
+    {
+      "nombre": "despedida",
+      "ejemplos": [
+        "adios", "hasta luego", "nos vemos", "chao", "bye", "eso es todo", "hasta pronto", "que tenga buen dia",
+        "feliz tarde", "hasta la proxima"
+      ],
+      "respuestas": [
+        "Fue un gusto ayudarte. Cuando necesites planificar otro servicio, escríbeme por aquí.",
+        "¡Hasta pronto! Aquí estaré cuando necesites cotizar un servicio con SACOR."
+      ]
+    },
+    {
+      "nombre": "agradecimiento",
+      "ejemplos": [
+        "gracias", "muchas gracias", "te lo agradezco", "muy amable", "excelente gracias", "mil gracias",
+        "gracias por la ayuda", "se agradece", "va gracias"
+      ],
+      "respuestas": [
+        "¡Con mucho gusto!",
+        "¡Para eso estoy!"
+      ]
+    },
+    {
+      "nombre": "solicitar_cotizacion",
+      "ejemplos": [
+        "quiero una cotizacion", "necesito cotizar un servicio", "quisiera solicitar una cotizacion",
+        "me pueden cotizar", "solicitar cotizacion", "cotizar", "quiero contratar un servicio",
+        "necesito un camion para llevar material", "necesito transportar material", "quiero programar un viaje",
+        "necesito planificar unos viajes", "necesito un servicio de recoleccion", "quiero reciclar",
+        "necesito sacar basura de mi empresa", "presupuesto para un traslado", "necesito mover escombros",
+        "quiero agendar un servicio", "necesito un acarreo", "ocupo un camion", "me interesa contratarlos",
+        "necesitamos el servicio para una obra", "quiero hacer una solicitud"
+      ],
+      "respuestas": []
+    },
+    {
+      "nombre": "consultar_servicios",
+      "ejemplos": [
+        "que servicios ofrecen", "a que se dedican", "que hacen", "cuales son sus servicios",
+        "que tipo de trabajos realizan", "que ofrece sacor", "en que me pueden ayudar", "que materiales trasladan",
+        "que pueden hacer", "que servicios tienen", "informacion de sus servicios"
+      ],
+      "respuestas": [
+        "En *SACOR* ofrecemos:\n\n- *Acarreo de materiales*: llevamos ripio, tierra, escombros y otros materiales de un lugar a otro.\n- *Recolección de desechos*: retiramos desechos sólidos y los llevamos a disposición final.\n- *Reciclaje*: recuperamos materiales reciclables.\n- *Servicios específicos*: trabajos a la medida de lo que necesites.\n\nPuede ser un servicio de una sola vez o un contrato recurrente."
+      ]
+    },
+    {
+      "nombre": "consultar_precio",
+      "ejemplos": [
+        "cuanto cuesta", "cual es el precio", "que precio tiene el viaje", "cuanto cobran por tonelada", "tarifas",
+        "precios", "cuanto sale un viaje", "es caro", "cuanto me sale", "cuanto vale el servicio"
+      ],
+      "respuestas": [
+        "El precio depende del tipo de servicio, del material, de la distancia y de la cantidad de viajes. Por eso armamos una cotización a tu medida: un asesor la revisa y te envía el precio exacto."
+      ]
+    },
+    {
+      "nombre": "consultar_horario",
+      "ejemplos": [
+        "cual es su horario", "a que hora abren", "hasta que hora atienden", "trabajan los sabados",
+        "horario de atencion", "que dias trabajan", "a que hora cierran", "atienden los domingos"
+      ],
+      "respuestas": [
+        "Nuestros asesores atienden de *lunes a viernes de 8:00 a 17:00*. Yo, el asistente virtual, estoy disponible las 24 horas para registrar tu solicitud."
+      ]
+    },
+    {
+      "nombre": "consultar_contacto",
+      "ejemplos": [
+        "donde estan ubicados", "cual es su direccion", "tienen oficina", "numero de telefono",
+        "como los contacto", "donde queda sacor", "en que lugar estan", "tienen pagina web", "cual es su correo"
+      ],
+      "respuestas": [
+        "SACOR está en *San Salvador* y brinda servicios en distintas zonas del país. Puedes escribirnos por este mismo chat o visitar nuestro sitio web para conocer más."
+      ]
+    },
+    {
+      "nombre": "hablar_asesor",
+      "ejemplos": [
+        "quiero hablar con una persona", "comunicarme con un asesor", "hablar con alguien", "atencion humana",
+        "pasame con un agente", "necesito un asesor", "quiero hablar con un humano", "me puede atender una persona",
+        "asesor"
+      ],
+      "respuestas": [
+        "Claro. Un asesor de SACOR te responderá en este chat en horario de oficina, de lunes a viernes de 8:00 a 17:00.\n\nSi luego quieres que yo te ayude, escribe *asistente*."
+      ]
+    },
+    {
+      "nombre": "cancelar",
+      "ejemplos": [
+        "cancelar", "ya no quiero", "olvidalo", "cancela la solicitud", "empezar de nuevo", "reiniciar",
+        "mejor no", "dejalo asi", "cancela todo", "ya no lo necesito"
+      ],
+      "respuestas": [
+        "Listo, cancelé la solicitud. Cuando quieras empezar de nuevo, solo escríbeme."
+      ]
+    },
+    {
+      "nombre": "afirmar",
+      "ejemplos": [
+        "si", "claro", "correcto", "esta bien", "de acuerdo", "ok", "perfecto", "asi es", "confirmo",
+        "adelante", "enviala", "si esta correcto", "dale", "va", "simon", "si por favor", "todo bien"
+      ],
+      "respuestas": []
+    },
+    {
+      "nombre": "negar",
+      "ejemplos": [
+        "no", "para nada", "no es correcto", "negativo", "esta mal", "hay un error", "no esta bien",
+        "quiero corregir", "falta cambiar algo"
+      ],
+      "respuestas": []
+    },
+    {
+      "nombre": "omitir",
+      "ejemplos": [
+        "omitir", "no tengo", "ninguno", "no se", "prefiero no decir", "saltar", "siguiente", "no aplica",
+        "paso", "no tengo correo", "ninguna", "nada", "sin detalles", "aun no se"
+      ],
+      "respuestas": []
+    },
+    {
+      "nombre": "identidad_bot",
+      "ejemplos": [
+        "eres un robot", "eres humano", "quien eres", "como te llamas", "que eres", "eres una persona",
+        "con quien hablo"
+      ],
+      "respuestas": [
+        "Soy el asistente virtual de *SACOR*. Entiendo lo que escribes para ayudarte a planificar y cotizar servicios de acarreo, recolección y reciclaje. Si prefieres, también puedo pasarte con un asesor."
+      ]
+    },
+    {
+      "nombre": "fuera_de_tema",
+      "ejemplos": [
+        "cuentame un chiste", "cual es la capital de francia", "quien gano el partido", "como esta el clima",
+        "ayudame con mi tarea", "que hora es", "recomiendame una pelicula", "cuanto es dos mas dos",
+        "quien es el presidente", "me gusta el futbol", "que opinas de la politica", "cantame una cancion",
+        "cual es tu color favorito"
+      ],
+      "respuestas": [
+        "Disculpa, en eso no puedo ayudarte. Soy el asistente de *SACOR* y me especializo en planificar y cotizar servicios de acarreo de materiales, recolección de desechos y reciclaje."
+      ]
+    }
+  ]
+}

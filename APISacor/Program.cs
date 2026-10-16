@@ -73,6 +73,8 @@ builder.Services.AddScoped<ServicioAccesoMovil>();
 var opcionesTwilio = builder.Configuration.GetSection(APISacor.Controllers.OpcionesTwilio.Seccion).Get<APISacor.Controllers.OpcionesTwilio>()
     ?? new APISacor.Controllers.OpcionesTwilio();
 builder.Services.AddSingleton(opcionesTwilio);
+builder.Services.AddSingleton(APISacor.Services.Nlp.ModeloNlp.Cargar(Path.Combine(AppContext.BaseDirectory, "Chatbot")));
+builder.Services.AddSingleton<APISacor.Services.Nlp.MotorConversacion>();
 builder.Services.AddScoped<ChatbotCotizacion>();
 
 // ---------------------------------------------------------------------------

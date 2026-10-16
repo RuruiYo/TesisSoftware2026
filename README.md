@@ -436,7 +436,25 @@ El chatbot permite que un cliente escriba al WhatsApp de SACOR y haga su solicit
 - Proveedor: Twilio (WhatsApp Sandbox en pruebas).
 - Webhook: `POST /api/whatsapp/webhook` (ruta pública protegida con la firma `X-Twilio-Signature`). La respuesta se devuelve en TwiML.
 - El estado de cada conversación se guarda en la tabla `conversacion_whatsapp`.
-- Comandos: `cancelar` reinicia la conversación; la opción 2 del menú deja el chat a un asesor humano y el bot calla hasta que el cliente escriba `menu` o pasen 12 horas.
+- El cliente escribe con sus propias palabras (por ejemplo, _necesito llevar 2 camiones de ripio de Soyapango a Apopa el lunes_). El bot entiende lo que puede y solo pregunta los datos que faltan.
+- `cancelar` reinicia la conversación. Si el cliente pide hablar con un asesor, el bot calla hasta que escriba `asistente` o pasen 12 horas.
+
+### Cómo entiende el lenguaje (NLP)
+
+Todo está en `APISacor/Services/Nlp/` y se entrena al arrancar la API con los archivos de `APISacor/Chatbot/`:
+
+| Archivo | Qué hace |
+|---|---|
+| `Chatbot/intenciones.json` | Datos de entrenamiento: cada **intención** (#saludo, #solicitar_cotizacion, #consultar_horario, #fuera_de_tema...) con sus frases de ejemplo y respuestas, y el **umbral de confianza** (0.5). |
+| `Chatbot/entidades.json` | Valores y sinónimos de las **entidades** (@servicio, @modalidad, @frecuencia, @municipio). Los materiales se leen de `precio_lugar`. |
+| `ProcesadorTexto.cs` | Normaliza (minúsculas, sin tildes), **tokeniza** y quita **stop words**. |
+| `StemmerEspanol.cs` | **Stemming** con el algoritmo Snowball para español (mismos resultados que NLTK). |
+| `ClasificadorIntenciones.cs` | Se entrena con las frases de ejemplo: vectores **TF-IDF** y similitud del coseno. Devuelve la intención y su confianza (0 a 1). |
+| `ExtractorEntidades.cs` | Extrae entidades: servicio, modalidad, frecuencia, materiales, origen y destino, fechas (`mañana`, `el lunes`, `25/11/2026`), duración, cantidad, nombre, DUI y correo. |
+| `MotorConversacion.cs` | Gestor del diálogo: llena los datos de la solicitud, pregunta los que faltan, permite corregir y muestra el resumen. |
+| `Services/ChatbotCotizacion.cs` | Une todo con la base de datos y guarda la cotización. |
+
+Si la confianza es menor que el umbral, el bot no adivina: responde con amabilidad que no entendió y repite la pregunta. Para mejorar el bot, se agregan frases de ejemplo en `intenciones.json` o sinónimos en `entidades.json` y se reinicia la API.
 
 ### 10.1 Configuración
 
